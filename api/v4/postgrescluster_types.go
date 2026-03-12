@@ -157,6 +157,11 @@ type PostgresClusterStatus struct {
 	// Resources contains references to related Kubernetes resources like ConfigMaps and Secrets.
 	// +optional
 	Resources *PostgresClusterResources `json:"resources,omitempty"`
+
+	// ObservedGeneration represents the .metadata.generation that the status was set based upon.
+	// Used to determine if the spec has changed since the last status update.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // ManagedRolesStatus tracks the state of managed PostgreSQL roles.

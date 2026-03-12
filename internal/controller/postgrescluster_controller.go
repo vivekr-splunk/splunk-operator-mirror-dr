@@ -31,9 +31,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logs "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // PostgresClusterReconciler reconciles a PostgresCluster object
@@ -46,6 +48,13 @@ type PostgresClusterReconciler struct {
 type MergedConfig struct {
 	Spec *enterprisev4.PostgresClusterSpec
 	CNPG *enterprisev4.CNPGConfig
+}
+
+// ManagedRoleKey is a simplified struct for comparing managed roles between PostgresCluster and CNPG Cluster specs.
+type ManagedRoleKey struct {
+	Name           string
+	Ensure         cnpgv1.EnsureOption
+	PasswordSecret string
 }
 
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=postgresclusters,verbs=get;list;watch;create;update;patch;delete
@@ -83,7 +92,8 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// helper function to update status with less boilerplate.
 	updateStatus := func(conditionType conditionTypes, status metav1.ConditionStatus, reason conditionReasons, message string, clusterPhase reconcileClusterPhases) error {
-		return (r.updateStatus(ctx, postgresCluster, conditionType, status, reason, message, clusterPhase))
+		r.updateStatus(postgresCluster, conditionType, status, reason, message, clusterPhase)
+		return nil
 	}
 
 	// finalizer handling must be done before any other processing, to ensure cleanup on deletion and to prevent creating CNPG clusters for PostgresCluster instances that are being deleted.
@@ -116,8 +126,10 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		logger.Info("Finalizer added successfully")
-		return ctrl.Result{}, nil
+		return ctrl.Result{Requeue: true}, nil
 	}
+
+	specChanged := postgresCluster.Status.ObservedGeneration != postgresCluster.Generation
 
 	// 2. Load the referenced PostgresClusterClass.
 	postgresClusterClass := &enterprisev4.PostgresClusterClass{}
@@ -147,7 +159,6 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		postgresSecretName = fmt.Sprintf("%s%s", postgresCluster.Name, defaultSecretSuffix)
 		logger.Info("Generating new secret name", "name", postgresSecretName)
 	}
-
 	postgresClusterSecretExists, secretExistErr := r.clusterSecretExists(ctx, postgresCluster.Namespace, postgresSecretName, secret)
 	if secretExistErr != nil {
 		logger.Error(secretExistErr, "Failed to check if PostgresCluster secret exists", "name", postgresSecretName)
@@ -156,24 +167,16 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, secretExistErr
 	}
+
 	if !postgresClusterSecretExists {
 		logger.Info("Creating PostgresCluster secret", "name", postgresSecretName)
-		if generateSecretErr := r.generateSecret(ctx, postgresCluster, postgresSecretName, secret); generateSecretErr != nil {
+		if generateSecretErr := r.generateSecret(ctx, postgresCluster, postgresSecretName); generateSecretErr != nil {
 			logger.Error(generateSecretErr, "Failed to ensure PostgresCluster secret", "name", postgresSecretName)
 			if statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonUserSecretFailed, fmt.Sprintf("Failed to generate PostgresCluster secret: %v", generateSecretErr), failedClusterPhase); statusErr != nil {
 				logger.Error(statusErr, "Failed to update status")
 			}
 			return ctrl.Result{}, generateSecretErr
 		}
-		if err := r.Status().Update(ctx, postgresCluster); err != nil {
-			if apierrors.IsConflict(err) {
-				logger.Info("Conflict after secret creation, will requeue")
-				return ctrl.Result{Requeue: true}, nil
-			}
-			logger.Error(err, "Failed to update status after secret creation")
-			return ctrl.Result{}, err
-		}
-		logger.Info("SecretRef persisted to status")
 	}
 	// We need to restore OwnerReference for existing secret, if it was removed, otherwise secret will be orphaned
 	hasOwnerRef, ownerRefErr := controllerutil.HasOwnerReference(secret.GetOwnerReferences(), postgresCluster, r.Scheme)
@@ -200,7 +203,9 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		logger.Info("Existing secret linked successfully")
 	}
-
+	if postgresCluster.Status.Resources == nil {
+		postgresCluster.Status.Resources = &enterprisev4.PostgresClusterResources{}
+	}
 	if postgresCluster.Status.Resources.SecretRef == nil {
 		postgresCluster.Status.Resources.SecretRef = &corev1.LocalObjectReference{Name: postgresSecretName}
 	}
@@ -395,21 +400,39 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		if postgresCluster.Status.Resources.ConfigMapRef == nil {
 			postgresCluster.Status.Resources.ConfigMapRef = &corev1.LocalObjectReference{Name: desiredConfigMap.Name}
+			logger.Info("ConfigMap reference updated in status", "configMap", desiredConfigMap.Name)
+		}
+		logger.Info("CNPG Cluster is healthy and ConfigMap is reconciled")
+
+	}
+
+	// 9. Update status conditions and observed generation if spec has changed, and sync final status.
+	originalStatus := postgresCluster.Status.DeepCopy()
+	if err := r.syncStatus(postgresCluster, cnpgCluster); err != nil {
+		logger.Error(err, "Failed to sync final status")
+		return ctrl.Result{}, err
+	}
+
+	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy && r.arePoolersReady(ctx, postgresCluster) {
+		if err := r.syncPoolerStatus(ctx, postgresCluster); err != nil {
+			logger.Error(err, "Failed to sync pooler status")
+			return ctrl.Result{}, err
 		}
 	}
 
-	// 9. Final status update and sync
-	if err := r.syncStatus(ctx, postgresCluster, cnpgCluster); err != nil {
-		logger.Error(err, "Failed to sync status")
-		if apierrors.IsConflict(err) {
-			logger.Info("Conflict during status update, will requeue")
-			return ctrl.Result{Requeue: true}, nil // Don't return error, just requeue
-		}
-		return ctrl.Result{}, fmt.Errorf("failed to sync status: %w", err)
+	if specChanged {
+		postgresCluster.Status.ObservedGeneration = postgresCluster.Generation
 	}
-	if cnpgCluster.Status.Phase == cnpgv1.PhaseHealthy && r.arePoolersReady(ctx, postgresCluster) {
-		logger.Info("Poolers are ready, syncing pooler status")
-		r.syncPoolerStatus(ctx, postgresCluster)
+
+	if !equality.Semantic.DeepEqual(*originalStatus, postgresCluster.Status) {
+		if err := r.Status().Update(ctx, postgresCluster); err != nil {
+			if apierrors.IsConflict(err) {
+				logger.Info("Conflict updating status, requeueing")
+				return ctrl.Result{Requeue: true}, nil
+			}
+			logger.Error(err, "Failed to sync final status")
+			return ctrl.Result{}, err
+		}
 	}
 	logger.Info("Reconciliation complete")
 	return ctrl.Result{}, nil
@@ -603,7 +626,7 @@ func (r *PostgresClusterReconciler) createConnectionPooler(
 
 	if apierrors.IsNotFound(err) {
 		logs.FromContext(ctx).Info("Creating CNPG Pooler", "name", poolerName, "type", poolerType)
-		r.updateStatus(ctx, postgresCluster, poolerReady, metav1.ConditionFalse, reasonPoolerCreating, fmt.Sprintf("Creating %s pooler", poolerType), pendingClusterPhase)
+		r.updateStatus(postgresCluster, poolerReady, metav1.ConditionFalse, reasonPoolerCreating, fmt.Sprintf("Creating %s pooler", poolerType), pendingClusterPhase)
 		pooler := r.buildCNPGPooler(postgresCluster, mergedConfig, cnpgCluster, poolerType)
 		return r.Create(ctx, pooler)
 	}
@@ -647,7 +670,7 @@ func (r *PostgresClusterReconciler) buildCNPGPooler(
 }
 
 // syncStatus maps CNPG Cluster state to PostgresCluster object and handles pooler status.
-func (r *PostgresClusterReconciler) syncStatus(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster) error {
+func (r *PostgresClusterReconciler) syncStatus(postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster) error {
 
 	// 1. Set ProvisionerRef
 	postgresCluster.Status.ProvisionerRef = &corev1.ObjectReference{
@@ -764,19 +787,12 @@ func (r *PostgresClusterReconciler) syncStatus(ctx context.Context, postgresClus
 		message = fmt.Sprintf("CNPG cluster clusterPhase: %s", cnpgCluster.Status.Phase)
 	}
 
-	return r.updateStatus(ctx, postgresCluster, clusterReady, conditionStatus, reason, message, clusterPhase)
+	r.updateStatus(postgresCluster, clusterReady, conditionStatus, reason, message, clusterPhase)
+	return nil
 }
 
 // updateStatus sets the clusterPhase, condition and persists the status to Kubernetes.
-func (r *PostgresClusterReconciler) updateStatus(
-	ctx context.Context,
-	postgresCluster *enterprisev4.PostgresCluster,
-	conditionType conditionTypes,
-	status metav1.ConditionStatus,
-	reason conditionReasons,
-	message string,
-	clusterPhase reconcileClusterPhases,
-) error {
+func (r *PostgresClusterReconciler) updateStatus(postgresCluster *enterprisev4.PostgresCluster, conditionType conditionTypes, status metav1.ConditionStatus, reason conditionReasons, message string, clusterPhase reconcileClusterPhases) {
 	postgresCluster.Status.Phase = string(clusterPhase)
 	meta.SetStatusCondition(&postgresCluster.Status.Conditions, metav1.Condition{
 		Type:               string(conditionType),
@@ -785,10 +801,6 @@ func (r *PostgresClusterReconciler) updateStatus(
 		Message:            message,
 		ObservedGeneration: postgresCluster.Generation,
 	})
-	if err := r.Status().Update(ctx, postgresCluster); err != nil {
-		return fmt.Errorf("failed to update PostgresCluster status: %w", err)
-	}
-	return nil
 }
 
 // syncPoolerStatus populates ConnectionPoolerStatus and the PoolerReady condition.
@@ -817,16 +829,7 @@ func (r *PostgresClusterReconciler) syncPoolerStatus(ctx context.Context, postgr
 	rwDesired, rwScheduled := r.getPoolerInstanceCount(rwPooler)
 	roDesired, roScheduled := r.getPoolerInstanceCount(roPooler)
 
-	if err := r.updateStatus(
-		ctx,
-		postgresCluster,
-		poolerReady,
-		metav1.ConditionTrue,
-		reasonAllInstancesReady,
-		fmt.Sprintf("%s: %d/%d, %s: %d/%d", readWriteEndpoint, rwScheduled, rwDesired, readOnlyEndpoint, roScheduled, roDesired),
-		readyClusterPhase); err != nil {
-		return err
-	}
+	r.updateStatus(postgresCluster, poolerReady, metav1.ConditionTrue, reasonAllInstancesReady, fmt.Sprintf("%s: %d/%d, %s: %d/%d", readWriteEndpoint, rwScheduled, rwDesired, readOnlyEndpoint, roScheduled, roDesired), readyClusterPhase)
 	return nil
 }
 
@@ -869,6 +872,19 @@ func (r *PostgresClusterReconciler) arePoolersReady(ctx context.Context, postgre
 	return r.isPoolerReady(rwPooler, rwErr) && r.isPoolerReady(roPooler, roErr)
 }
 
+// toKey converts a CNPG RoleConfiguration to a simplified ManagedRoleKey for easier comparison and diffing.
+func toKey(r cnpgv1.RoleConfiguration) ManagedRoleKey {
+	secret := ""
+	if r.PasswordSecret != nil {
+		secret = r.PasswordSecret.Name
+	}
+	return ManagedRoleKey{
+		Name:           r.Name,
+		Ensure:         r.Ensure,
+		PasswordSecret: secret,
+	}
+}
+
 // reconcileManagedRoles synchronizes ManagedRoles from PostgresCluster spec to CNPG Cluster managed.roles using diff-based patching
 func (r *PostgresClusterReconciler) reconcileManagedRoles(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster) error {
 	logger := logs.FromContext(ctx)
@@ -880,8 +896,9 @@ func (r *PostgresClusterReconciler) reconcileManagedRoles(ctx context.Context, p
 		return nil
 	}
 
-	// Convert PostgresCluster ManagedRoles to CNPG RoleConfiguration format
-	desiredRoles := []cnpgv1.RoleConfiguration{}
+	// Convert PostgresCluster ManagedRoles to CNPG RoleConfiguration format, using a map for easy lookup
+	desiredRolesMap := make(map[string]cnpgv1.RoleConfiguration)
+	desiredRoles := make([]cnpgv1.RoleConfiguration, 0, len(postgresCluster.Spec.ManagedRoles))
 	for _, role := range postgresCluster.Spec.ManagedRoles {
 		cnpgRole := cnpgv1.RoleConfiguration{
 			Name: role.Name,
@@ -898,7 +915,7 @@ func (r *PostgresClusterReconciler) reconcileManagedRoles(ctx context.Context, p
 				Name: role.PasswordSecretRef.Name,
 			}
 		}
-
+		desiredRolesMap[role.Name] = cnpgRole
 		desiredRoles = append(desiredRoles, cnpgRole)
 	}
 
@@ -907,27 +924,49 @@ func (r *PostgresClusterReconciler) reconcileManagedRoles(ctx context.Context, p
 		currentRoles = cnpgCluster.Spec.Managed.Roles
 	}
 
-	if equality.Semantic.DeepEqual(currentRoles, desiredRoles) {
+	mergedRoles := make([]cnpgv1.RoleConfiguration, 0, len(currentRoles)+len(desiredRoles))
+	currentKeysMap := make(map[string]ManagedRoleKey)
+
+	// Preserve roles not managed by us and index current roles for diffing.
+	for _, currentRole := range currentRoles {
+		currentKeysMap[currentRole.Name] = toKey(currentRole)
+		if _, isDesired := desiredRolesMap[currentRole.Name]; !isDesired {
+			mergedRoles = append(mergedRoles, currentRole)
+		}
+	}
+	mergedRoles = append(mergedRoles, desiredRoles...)
+
+	needsUpdate := false
+	if len(currentRoles) != len(mergedRoles) {
+		needsUpdate = true
+	} else {
+		for _, desired := range desiredRolesMap {
+			currentKey, exists := currentKeysMap[desired.Name]
+			if !exists || !equality.Semantic.DeepEqual(currentKey, toKey(desired)) {
+				needsUpdate = true
+				break
+			}
+		}
+	}
+	if !needsUpdate {
 		logger.Info("CNPG Cluster roles already match desired state, no update needed")
 		return nil
 	}
-
-	logger.Info("CNPG Cluster roles differ from desired state, updating",
-		"currentCount", len(currentRoles),
-		"desiredCount", len(desiredRoles))
 
 	originalCluster := cnpgCluster.DeepCopy()
 
 	if cnpgCluster.Spec.Managed == nil {
 		cnpgCluster.Spec.Managed = &cnpgv1.ManagedConfiguration{}
 	}
-	cnpgCluster.Spec.Managed.Roles = desiredRoles
+	cnpgCluster.Spec.Managed.Roles = mergedRoles
 
 	if err := r.Patch(ctx, cnpgCluster, client.MergeFrom(originalCluster)); err != nil {
 		return fmt.Errorf("failed to patch CNPG Cluster with managed roles: %w", err)
 	}
 
-	logger.Info("Successfully updated CNPG Cluster with managed roles", "roleCount", len(desiredRoles))
+	logger.Info("Successfully updated CNPG Cluster with managed roles",
+		"totalRoleCount", len(mergedRoles),
+		"postgresClusterRoleCount", len(desiredRolesMap))
 	return nil
 }
 
@@ -964,8 +1003,8 @@ func (r *PostgresClusterReconciler) generateConfigMap(ctx context.Context, postg
 	configMapName := fmt.Sprintf("%s%s", postgresCluster.Name, defaultConfigMapSuffix)
 	if postgresCluster.Status.Resources != nil && postgresCluster.Status.Resources.ConfigMapRef != nil {
 		configMapName = postgresCluster.Status.Resources.ConfigMapRef.Name
-	} 
-	
+	}
+
 	data := map[string]string{
 		"CLUSTER_RW_ENDPOINT":   fmt.Sprintf("%s-rw.%s", cnpgCluster.Name, cnpgCluster.Namespace),
 		"CLUSTER_RO_ENDPOINT":   fmt.Sprintf("%s-ro.%s", cnpgCluster.Name, cnpgCluster.Namespace),
@@ -994,8 +1033,9 @@ func (r *PostgresClusterReconciler) generateConfigMap(ctx context.Context, postg
 }
 
 // generateSecret creates a Kubernetes Secret with credentials for the default postgres user if it doesn't already exist.
-func (r *PostgresClusterReconciler) generateSecret(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, secretName string, secret *corev1.Secret) error {
-	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: postgresCluster.Namespace}, secret)
+func (r *PostgresClusterReconciler) generateSecret(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, secretName string) error {
+	existing := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: postgresCluster.Namespace}, existing)
 
 	// If secret does not exist, create it
 	if apierrors.IsNotFound(err) {
@@ -1014,6 +1054,7 @@ func (r *PostgresClusterReconciler) generateSecret(ctx context.Context, postgres
 			},
 			Type: corev1.SecretTypeOpaque,
 		}
+		// Set owner reference
 		if err := ctrl.SetControllerReference(postgresCluster, secret, r.Scheme); err != nil {
 			return err
 		}
@@ -1023,11 +1064,6 @@ func (r *PostgresClusterReconciler) generateSecret(ctx context.Context, postgres
 	} else if err != nil {
 		return err
 	}
-	if postgresCluster.Status.Resources == nil {
-		postgresCluster.Status.Resources = &enterprisev4.PostgresClusterResources{}
-	}
-	postgresCluster.Status.Resources.SecretRef = &corev1.LocalObjectReference{Name: secretName}
-
 	return nil
 }
 
@@ -1198,10 +1234,8 @@ func (r *PostgresClusterReconciler) patchObject(ctx context.Context, original cl
 func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterprisev4.PostgresCluster{}).
-		Owns(&cnpgv1.Cluster{}).
-		Owns(&cnpgv1.Pooler{}).
-		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Secret{}).
+		Owns(&cnpgv1.Cluster{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&cnpgv1.Pooler{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Named("postgresCluster").
 		Complete(r)
 }

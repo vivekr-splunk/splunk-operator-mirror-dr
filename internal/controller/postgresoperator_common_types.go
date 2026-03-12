@@ -1,9 +1,8 @@
 package controller
 
 import (
-	"time"
-
 	corev1 "k8s.io/api/core/v1"
+	"time"
 )
 
 // This struct is used to compare the merged configuration from PostgresClusterClass and PostgresClusterSpec
