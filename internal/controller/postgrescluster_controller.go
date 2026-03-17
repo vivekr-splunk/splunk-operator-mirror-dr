@@ -50,10 +50,13 @@ type MergedConfig struct {
 	CNPG *enterprisev4.CNPGConfig
 }
 
-// ManagedRoleKey is a simplified struct for comparing managed roles between PostgresCluster and CNPG Cluster specs.
-type ManagedRoleKey struct {
+// normalizedManagedRole holds only the fields this controller sets on a CNPG RoleConfiguration.
+// CNPG's admission webhook populates defaults (ConnectionLimit: -1, Inherit: true) that would
+// cause equality.Semantic.DeepEqual to always report a diff — we compare only what we own.
+type normalizedManagedRole struct {
 	Name           string
 	Ensure         cnpgv1.EnsureOption
+	Login          bool
 	PasswordSecret string
 }
 
@@ -872,101 +875,85 @@ func (r *PostgresClusterReconciler) arePoolersReady(ctx context.Context, postgre
 	return r.isPoolerReady(rwPooler, rwErr) && r.isPoolerReady(roPooler, roErr)
 }
 
-// toKey converts a CNPG RoleConfiguration to a simplified ManagedRoleKey for easier comparison and diffing.
-func toKey(r cnpgv1.RoleConfiguration) ManagedRoleKey {
+// normalizeManagedRole projects a CNPG RoleConfiguration down to only the fields this controller controls.
+// CNPG's admission webhook populates defaults on the live object (ConnectionLimit: -1, Inherit: true)
+// that are absent from our desired slice — normalizing both sides before comparison prevents a
+// permanent diff that would re-patch on every reconcile.
+func normalizeManagedRole(r cnpgv1.RoleConfiguration) normalizedManagedRole {
 	secret := ""
 	if r.PasswordSecret != nil {
 		secret = r.PasswordSecret.Name
 	}
-	return ManagedRoleKey{
+	return normalizedManagedRole{
 		Name:           r.Name,
 		Ensure:         r.Ensure,
+		Login:          r.Login,
 		PasswordSecret: secret,
 	}
 }
 
-// reconcileManagedRoles synchronizes ManagedRoles from PostgresCluster spec to CNPG Cluster managed.roles using diff-based patching
+func normalizeManagedRoles(roles []cnpgv1.RoleConfiguration) []normalizedManagedRole {
+	result := make([]normalizedManagedRole, 0, len(roles))
+	for _, r := range roles {
+		result = append(result, normalizeManagedRole(r))
+	}
+	return result
+}
+
+// buildCNPGRole converts a single PostgresCluster ManagedRole to its CNPG RoleConfiguration equivalent.
+// Login is only set for present roles — absent roles must not be able to authenticate.
+func buildCNPGRole(role enterprisev4.ManagedRole) cnpgv1.RoleConfiguration {
+	cnpgRole := cnpgv1.RoleConfiguration{
+		Name:   role.Name,
+		Ensure: cnpgv1.EnsurePresent,
+		Login:  true,
+	}
+	if role.Ensure == "absent" {
+		cnpgRole.Ensure = cnpgv1.EnsureAbsent
+		cnpgRole.Login = false
+	}
+	if role.PasswordSecretRef != nil {
+		cnpgRole.PasswordSecret = &cnpgv1.LocalObjectReference{Name: role.PasswordSecretRef.Name}
+	}
+	return cnpgRole
+}
+
+// reconcileManagedRoles synchronizes ManagedRoles from PostgresCluster spec to CNPG Cluster managed.roles.
 func (r *PostgresClusterReconciler) reconcileManagedRoles(ctx context.Context, postgresCluster *enterprisev4.PostgresCluster, cnpgCluster *cnpgv1.Cluster) error {
 	logger := logs.FromContext(ctx)
 
-	// If no managed roles in PostgresCluster spec, nothing to do for now
-	// TODO: Should we remove roles from CNPG if they're removed from PostgresCluster?
 	if len(postgresCluster.Spec.ManagedRoles) == 0 {
 		logger.Info("No managed roles to reconcile")
 		return nil
 	}
 
-	// Convert PostgresCluster ManagedRoles to CNPG RoleConfiguration format, using a map for easy lookup
-	desiredRolesMap := make(map[string]cnpgv1.RoleConfiguration)
-	desiredRoles := make([]cnpgv1.RoleConfiguration, 0, len(postgresCluster.Spec.ManagedRoles))
+	desired := make([]cnpgv1.RoleConfiguration, 0, len(postgresCluster.Spec.ManagedRoles))
 	for _, role := range postgresCluster.Spec.ManagedRoles {
-		cnpgRole := cnpgv1.RoleConfiguration{
-			Name: role.Name,
-		}
-
-		if role.Ensure == "absent" {
-			cnpgRole.Ensure = cnpgv1.EnsureAbsent
-		} else {
-			cnpgRole.Ensure = cnpgv1.EnsurePresent
-		}
-
-		if role.PasswordSecretRef != nil {
-			cnpgRole.PasswordSecret = &cnpgv1.LocalObjectReference{
-				Name: role.PasswordSecretRef.Name,
-			}
-		}
-		desiredRolesMap[role.Name] = cnpgRole
-		desiredRoles = append(desiredRoles, cnpgRole)
+		desired = append(desired, buildCNPGRole(role))
 	}
 
-	var currentRoles []cnpgv1.RoleConfiguration
-	if cnpgCluster.Spec.Managed != nil && cnpgCluster.Spec.Managed.Roles != nil {
-		currentRoles = cnpgCluster.Spec.Managed.Roles
+	var current []cnpgv1.RoleConfiguration
+	if cnpgCluster.Spec.Managed != nil {
+		current = cnpgCluster.Spec.Managed.Roles
 	}
 
-	mergedRoles := make([]cnpgv1.RoleConfiguration, 0, len(currentRoles)+len(desiredRoles))
-	currentKeysMap := make(map[string]ManagedRoleKey)
-
-	// Preserve roles not managed by us and index current roles for diffing.
-	for _, currentRole := range currentRoles {
-		currentKeysMap[currentRole.Name] = toKey(currentRole)
-		if _, isDesired := desiredRolesMap[currentRole.Name]; !isDesired {
-			mergedRoles = append(mergedRoles, currentRole)
-		}
-	}
-	mergedRoles = append(mergedRoles, desiredRoles...)
-
-	needsUpdate := false
-	if len(currentRoles) != len(mergedRoles) {
-		needsUpdate = true
-	} else {
-		for _, desired := range desiredRolesMap {
-			currentKey, exists := currentKeysMap[desired.Name]
-			if !exists || !equality.Semantic.DeepEqual(currentKey, toKey(desired)) {
-				needsUpdate = true
-				break
-			}
-		}
-	}
-	if !needsUpdate {
+	if equality.Semantic.DeepEqual(normalizeManagedRoles(current), normalizeManagedRoles(desired)) {
 		logger.Info("CNPG Cluster roles already match desired state, no update needed")
 		return nil
 	}
 
+	logger.Info("Detected drift in managed roles, patching", "count", len(desired))
 	originalCluster := cnpgCluster.DeepCopy()
-
 	if cnpgCluster.Spec.Managed == nil {
 		cnpgCluster.Spec.Managed = &cnpgv1.ManagedConfiguration{}
 	}
-	cnpgCluster.Spec.Managed.Roles = mergedRoles
+	cnpgCluster.Spec.Managed.Roles = desired
 
-	if err := r.Patch(ctx, cnpgCluster, client.MergeFrom(originalCluster)); err != nil {
-		return fmt.Errorf("failed to patch CNPG Cluster with managed roles: %w", err)
+	if err := r.patchObject(ctx, originalCluster, cnpgCluster, "CNPGCluster"); err != nil {
+		return fmt.Errorf("patching managed roles: %w", err)
 	}
 
-	logger.Info("Successfully updated CNPG Cluster with managed roles",
-		"totalRoleCount", len(mergedRoles),
-		"postgresClusterRoleCount", len(desiredRolesMap))
+	logger.Info("Successfully updated managed roles", "count", len(desired))
 	return nil
 }
 
