@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logs "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -129,9 +130,10 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		logger.Info("Finalizer added successfully")
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{}, nil
 	}
 
+	// Check if the spec has changed, if observed generation is different from current generation, it means spec was updated since last reconciliation and we may need to update status conditions and observed generation at the end of reconciliation loop.
 	specChanged := postgresCluster.Status.ObservedGeneration != postgresCluster.Generation
 
 	// 2. Load the referenced PostgresClusterClass.
@@ -422,7 +424,6 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 	}
-
 	if specChanged {
 		postgresCluster.Status.ObservedGeneration = postgresCluster.Generation
 	}
@@ -1221,8 +1222,92 @@ func (r *PostgresClusterReconciler) patchObject(ctx context.Context, original cl
 func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&enterprisev4.PostgresCluster{}).
-		Owns(&cnpgv1.Cluster{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&cnpgv1.Cluster{}, builder.WithPredicates(CNPGClusterTansitionPredicate())).
 		Owns(&cnpgv1.Pooler{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Named("postgresCluster").
 		Complete(r)
+}
+
+func cnpgClusterStatusMappingForPredicate(cluster *cnpgv1.Cluster) string {
+	switch cluster.Status.Phase {
+	case cnpgv1.PhaseHealthy:
+		return string(readyClusterPhase)
+
+	case cnpgv1.PhaseFirstPrimary,
+		cnpgv1.PhaseCreatingReplica,
+		cnpgv1.PhaseWaitingForInstancesToBeActive:
+		return string(provisioningClusterPhase)
+
+	case cnpgv1.PhaseSwitchover,
+		cnpgv1.PhaseFailOver,
+		cnpgv1.PhaseInplacePrimaryRestart,
+		cnpgv1.PhaseInplaceDeletePrimaryRestart,
+		cnpgv1.PhaseUpgrade,
+		cnpgv1.PhaseMajorUpgrade,
+		cnpgv1.PhaseUpgradeDelayed,
+		cnpgv1.PhaseOnlineUpgrading,
+		cnpgv1.PhaseApplyingConfiguration,
+		cnpgv1.PhaseReplicaClusterPromotion:
+		return string(configuringClusterPhase)
+
+	case cnpgv1.PhaseWaitingForUser,
+		cnpgv1.PhaseUnrecoverable,
+		cnpgv1.PhaseCannotCreateClusterObjects,
+		cnpgv1.PhaseUnknownPlugin,
+		cnpgv1.PhaseFailurePlugin,
+		cnpgv1.PhaseImageCatalogError,
+		cnpgv1.PhaseArchitectureBinaryMissing:
+		return string(failedClusterPhase)
+
+	case "":
+		return string(pendingClusterPhase)
+
+	default:
+		return string(provisioningClusterPhase)
+	}
+}
+
+// cnpgClusterReadyStatus a helper function to extract the ClusterReady condition status from a CNPG Cluster, to be used for predication
+func cnpgClusterReadyStatus(cluster *cnpgv1.Cluster) metav1.ConditionStatus {
+	condition := meta.FindStatusCondition(
+		cluster.Status.Conditions,
+		string(cnpgv1.ConditionClusterReady),
+	)
+	if condition == nil {
+		return metav1.ConditionUnknown
+	}
+	return condition.Status
+}
+
+// CNPGClusterTansitionPredicate is a custom predicator to filter CNPG Cluster events to only those that represent meaningful state changes for our PostgresCluster status mapping, to avoid excessive reconciles and status updates.
+func CNPGClusterTansitionPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			newObj, ok := e.ObjectNew.(*cnpgv1.Cluster)
+			if !ok {
+				return false
+			}
+			oldObj, ok := e.ObjectOld.(*cnpgv1.Cluster)
+			if !ok {
+				return false
+			}
+
+			if newObj.GetDeletionGracePeriodSeconds() != nil {
+				return true
+			}
+
+			if oldObj.GetGeneration() != newObj.GetGeneration() {
+				return true
+			}
+
+			if cnpgClusterStatusMappingForPredicate(oldObj) != cnpgClusterStatusMappingForPredicate(newObj) {
+				return true
+			}
+
+			return cnpgClusterReadyStatus(oldObj) != cnpgClusterReadyStatus(newObj)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return !e.DeleteStateUnknown
+		},
+	}
 }
