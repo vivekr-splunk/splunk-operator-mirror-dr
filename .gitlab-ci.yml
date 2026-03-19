@@ -7,6 +7,7 @@ stages:
   - test
   - security
   - build
+  - image_scan
   - integration
   - release
   - administration
@@ -44,7 +45,17 @@ default:
       mode_file="rehearsal/${WORKFLOW_SLUG}-mode.txt"
       plan_file="rehearsal/${WORKFLOW_SLUG}-plan.txt"
       missing_file="rehearsal/${WORKFLOW_SLUG}-missing-vars.txt"
+      execution_log="rehearsal/${WORKFLOW_SLUG}-execution.log"
+      image_ref_file="rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
+      digest_file="rehearsal/${WORKFLOW_SLUG}-digest.txt"
+      trivy_sarif_file="rehearsal/${WORKFLOW_SLUG}-trivy-results.sarif"
+      trivy_text_file="rehearsal/${WORKFLOW_SLUG}-trivy-results.txt"
       : > "${missing_file}"
+      : > "${execution_log}"
+      : > "${image_ref_file}"
+      : > "${digest_file}"
+      : > "${trivy_sarif_file}"
+      : > "${trivy_text_file}"
 
       execute_value="false"
       if [ -n "${EXECUTE_FLAG_NAME:-}" ]; then
@@ -95,6 +106,14 @@ default:
         exit 0
       fi
 
+      if [ -n "${EXECUTION_SCRIPT:-}" ]; then
+        printf '%s\n' "${EXECUTION_SCRIPT}" > rehearsal/${WORKFLOW_SLUG}-execution-script.sh
+        chmod +x rehearsal/${WORKFLOW_SLUG}-execution-script.sh
+        sh rehearsal/${WORKFLOW_SLUG}-execution-script.sh 2>&1 | tee "${execution_log}"
+        echo "executed-runtime" | tee "${mode_file}"
+        exit 0
+      fi
+
       echo "execution-requested-prereqs-satisfied-but-concrete-runtime-steps-not-yet-implemented" | tee "${mode_file}"
   artifacts:
     when: always
@@ -104,6 +123,11 @@ default:
       - rehearsal/${WORKFLOW_SLUG}-mode.txt
       - rehearsal/${WORKFLOW_SLUG}-plan.txt
       - rehearsal/${WORKFLOW_SLUG}-missing-vars.txt
+      - rehearsal/${WORKFLOW_SLUG}-execution.log
+      - rehearsal/${WORKFLOW_SLUG}-image-ref.txt
+      - rehearsal/${WORKFLOW_SLUG}-digest.txt
+      - rehearsal/${WORKFLOW_SLUG}-trivy-results.sarif
+      - rehearsal/${WORKFLOW_SLUG}-trivy-results.txt
 
 format-and-vet:
   stage: verify
@@ -257,11 +281,26 @@ fossa-scan:
 build-test-push-rehearsal:
   extends: .workflow-rehearsal-template
   stage: build
+  image: docker:27.5.1-git
+  allow_failure: false
+  services:
+    - name: docker:27.5.1-dind
+      command:
+        - --tls=false
+  before_script:
+    - apk add --no-cache bash curl jq make python3 py3-pip
+    - pip3 install --no-cache-dir awscli
+    - docker version
+    - docker buildx version
+    - aws --version
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
   variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_DRIVER: overlay2
     WORKFLOW_SLUG: build-test-push-workflow
     WORKFLOW_NAME: Build and Test
     SOURCE_WORKFLOW_FILE: .github/workflows/build-test-push-workflow.yml
@@ -271,9 +310,83 @@ build-test-push-rehearsal:
     WORKFLOW_NOTES: Base verify and test coverage is already live in GitLab CI. This rehearsal job now tracks the remaining image build, Trivy scan, and smoke-test path. Cosign signing is explicitly deferred to a later release-focused migration slice.
     WORKFLOW_PLAN: |
       1. Build the operator image only against a STAGING_ECR_REPOSITORY target.
-      2. Run the Trivy image scan and publish the SARIF-equivalent artifact in GitLab.
-      3. Run EKS smoke tests only against staging subnets, buckets, and clusters.
-      4. Record cosign sign and verify as deferred until the dedicated release workflow migration slice.
+      2. Push only the commit-scoped image tag to internal ECR. Do not update latest.
+      3. Record the pushed image reference and digest for downstream scan and integration jobs.
+      4. Record Trivy and smoke-test execution as separate downstream rehearsal steps.
+    EXECUTION_SCRIPT: |
+      set -eu
+      export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
+      export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
+      export AWS_DEFAULT_REGION="${STAGING_AWS_DEFAULT_REGION}"
+      export IMAGE_REF="${STAGING_ECR_REPOSITORY}/splunk/splunk-operator:${CI_COMMIT_SHA}"
+      export PLATFORMS="linux/amd64"
+      export DOCKER_BUILDKIT=1
+
+      printf '%s\n' "${IMAGE_REF}" > "rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
+
+      aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | \
+        docker login --username AWS --password-stdin "${STAGING_ECR_REPOSITORY}"
+
+      make docker-buildx IMG="${IMAGE_REF}" PLATFORMS="${PLATFORMS}"
+
+      docker buildx imagetools inspect "${IMAGE_REF}" | tee "rehearsal/${WORKFLOW_SLUG}-digest.txt"
+
+build-test-push-trivy-scan:
+  extends: .workflow-rehearsal-template
+  stage: image_scan
+  image: docker:27.5.1-git
+  allow_failure: false
+  needs:
+    - job: build-test-push-rehearsal
+      artifacts: true
+  before_script:
+    - apk add --no-cache bash curl jq python3 py3-pip
+    - pip3 install --no-cache-dir awscli
+    - TRIVY_VERSION="0.57.1"
+    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin "${TRIVY_VERSION}"
+    - trivy --version
+    - aws --version
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+  variables:
+    WORKFLOW_SLUG: build-test-push-trivy-scan
+    WORKFLOW_NAME: Build and Test Trivy Image Scan
+    SOURCE_WORKFLOW_FILE: .github/workflows/build-test-push-workflow.yml
+    WORKFLOW_CLASS: image-scan
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_BUILD_TEST_PUSH
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
+    WORKFLOW_NOTES: This job scans only the staging ECR image produced by the standard build rehearsal. It does not upload to GitHub Security and it does not scan DockerHub.
+    WORKFLOW_PLAN: |
+      1. Read the staging image reference emitted by the build rehearsal job.
+      2. Authenticate to staging ECR only.
+      3. Run Trivy against the pushed image and publish SARIF/text artifacts in GitLab.
+    EXECUTION_SCRIPT: |
+      set -eu
+      export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
+      export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
+      export AWS_DEFAULT_REGION="${STAGING_AWS_DEFAULT_REGION}"
+      export IMAGE_REF="$(cat rehearsal/build-test-push-workflow-image-ref.txt)"
+      export ECR_PASSWORD="$(aws ecr get-login-password --region "${AWS_DEFAULT_REGION}")"
+
+      printf '%s\n' "${IMAGE_REF}" > "rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
+
+      trivy image \
+        --username AWS \
+        --password "${ECR_PASSWORD}" \
+        --severity CRITICAL \
+        --ignore-unfixed \
+        --format sarif \
+        --output "rehearsal/${WORKFLOW_SLUG}-trivy-results.sarif" \
+        "${IMAGE_REF}"
+
+      trivy image \
+        --username AWS \
+        --password "${ECR_PASSWORD}" \
+        --severity CRITICAL \
+        --ignore-unfixed \
+        "${IMAGE_REF}" | tee "rehearsal/${WORKFLOW_SLUG}-trivy-results.txt"
 
 distroless-build-test-push-rehearsal:
   extends: .workflow-rehearsal-template

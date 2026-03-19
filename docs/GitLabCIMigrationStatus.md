@@ -25,11 +25,17 @@
   - they only become executable after staging-safe variables are loaded and a workflow-specific `STAGING_EXECUTE_*` flag is enabled
   - DockerHub and other public release destinations are deferred until the later pre-release and automated-release migration slice
   - the current active execution phase also defers cosign sign and verify from the standard and distroless build rehearsals until the dedicated release workflow slice
+  - the standard build slice now has a real runtime implementation behind `STAGING_EXECUTE_BUILD_TEST_PUSH=true`
+  - that runtime implementation is intentionally narrower than GitHub today:
+    - it builds and pushes only the commit-scoped image tag into internal ECR
+    - it does not update `latest`
+    - it limits the first runtime proof to `linux/amd64`
+    - it runs Trivy against the staging ECR image in GitLab rather than uploading SARIF into GitHub Security
 
 ## Not Yet Migrated
 
 - concrete runtime implementation for the workflow-level rehearsal scaffolds
-- staging registry publication execution
+- staging registry publication execution for the standard build slice
 - cosign signing execution for release-focused workflows
 - Trivy image-scan execution against staging images
 - EKS, AKS, and GKE integration execution against staging clusters
@@ -67,6 +73,10 @@
   - `STAGING_EKS_VPC_PRIVATE_SUBNET_STRING`
   - `STAGING_TEST_VPC_ENDPOINT_URL`
 - Cosign variables were intentionally not copied into the rehearsal project. The current decision is to defer signing until the later release-workflow migration slice rather than reuse production signing material.
+- The standard build workflow class now includes:
+  - a real `build-test-push-rehearsal` runtime path using `docker:dind`, `awscli`, and `make docker-buildx`
+  - a real `build-test-push-trivy-scan` runtime path that scans the pushed staging image with Trivy
+  - both runtime paths remain disabled until `STAGING_EXECUTE_BUILD_TEST_PUSH=true` is set
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:
   - `build-test-push-workflow.yml`
   - `distroless-build-test-push-workflow.yml`
