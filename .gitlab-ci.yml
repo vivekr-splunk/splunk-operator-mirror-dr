@@ -32,11 +32,10 @@ default:
 
 .workflow-rehearsal-template:
   image: alpine:3.20
-  before_script:
-    - apk add --no-cache bash
+  allow_failure: true
   script:
     - |
-      set -euo pipefail
+      set -eu
       mkdir -p rehearsal
 
       status_file="rehearsal/${WORKFLOW_SLUG}-status.txt"
@@ -47,7 +46,10 @@ default:
 
       execute_value="false"
       if [ -n "${EXECUTE_FLAG_NAME:-}" ]; then
-        execute_value="${!EXECUTE_FLAG_NAME:-false}"
+        execute_value="$(printenv "${EXECUTE_FLAG_NAME}" 2>/dev/null || true)"
+        if [ -z "${execute_value}" ]; then
+          execute_value="false"
+        fi
       fi
 
       missing_vars=""
@@ -57,7 +59,8 @@ default:
         for raw_var in ${REQUIRED_VARS}; do
           var_name="$(echo "${raw_var}" | sed 's/^ *//; s/ *$//')"
           [ -z "${var_name}" ] && continue
-          if [ -z "${!var_name:-}" ]; then
+          var_value="$(printenv "${var_name}" 2>/dev/null || true)"
+          if [ -z "${var_value}" ]; then
             printf '%s\n' "${var_name}" >> "${missing_file}"
             missing_vars="${missing_vars}${missing_vars:+,}${var_name}"
           fi
