@@ -16,11 +16,12 @@ default:
   image: golang:1.24.2
   interruptible: true
   before_script:
+    - rm -rf .cache/go
     - apt-get update
     - apt-get install -y --no-install-recommends ca-certificates curl git make net-tools
     - go version
   cache:
-    key: "go-${CI_COMMIT_REF_SLUG}"
+    key: "go-v2-${CI_COMMIT_REF_SLUG}"
     paths:
       - bin/
 
@@ -38,6 +39,7 @@ bias-language:
   variables:
     PIP_INDEX_URL: "https://pypi.org/simple"
   before_script:
+    - rm -rf .cache/go
     - apt-get update
     - apt-get install -y --no-install-recommends git ripgrep
     - python --version
@@ -86,6 +88,7 @@ kubectl-splunk-tests:
   variables:
     PIP_INDEX_URL: "https://pypi.org/simple"
   before_script:
+    - rm -rf .cache/go
     - python --version
   script:
     - python -m venv /tmp/kubectl-splunk-venv
