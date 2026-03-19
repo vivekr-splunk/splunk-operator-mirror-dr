@@ -1,0 +1,55 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - when: never
+
+stages:
+  - verify
+  - test
+
+default:
+  image: golang:1.23.0
+  interruptible: true
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates curl git make
+    - go version
+  cache:
+    key: "go-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - .cache/go/build
+      - .cache/go/pkg/mod
+      - bin/
+  variables:
+    GIT_DEPTH: "0"
+    GOCACHE: "$CI_PROJECT_DIR/.cache/go/build"
+    GOMODCACHE: "$CI_PROJECT_DIR/.cache/go/pkg/mod"
+    GOFLAGS: "-mod=mod"
+
+format-and-vet:
+  stage: verify
+  script:
+    - make fmt
+    - git diff --exit-code
+    - make vet
+
+unit-tests:
+  stage: test
+  needs:
+    - format-and-vet
+  script:
+    - make setup/ginkgo
+    - make test
+    - go tool cover -func=coverage.out | tee coverage-summary.txt
+  artifacts:
+    when: always
+    paths:
+      - coverage.out
+      - coverage-summary.txt
+      - unit_test.xml
+    reports:
+      junit: unit_test.xml
+  coverage: '/^total:\s+\(statements\)\s+(\d+\.\d+)%$/'
