@@ -6,6 +6,10 @@ stages:
   - verify
   - test
   - security
+  - build
+  - integration
+  - release
+  - administration
 
 variables:
   GIT_DEPTH: "0"
@@ -25,6 +29,75 @@ default:
     key: "go-v2-${CI_COMMIT_REF_SLUG}"
     paths:
       - bin/
+
+.workflow-rehearsal-template:
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache bash
+  script:
+    - |
+      set -euo pipefail
+      mkdir -p rehearsal
+
+      status_file="rehearsal/${WORKFLOW_SLUG}-status.txt"
+      mode_file="rehearsal/${WORKFLOW_SLUG}-mode.txt"
+      plan_file="rehearsal/${WORKFLOW_SLUG}-plan.txt"
+      missing_file="rehearsal/${WORKFLOW_SLUG}-missing-vars.txt"
+      : > "${missing_file}"
+
+      execute_value="false"
+      if [ -n "${EXECUTE_FLAG_NAME:-}" ]; then
+        execute_value="${!EXECUTE_FLAG_NAME:-false}"
+      fi
+
+      missing_vars=""
+      if [ -n "${REQUIRED_VARS:-}" ]; then
+        old_ifs="${IFS}"
+        IFS=','
+        for raw_var in ${REQUIRED_VARS}; do
+          var_name="$(echo "${raw_var}" | sed 's/^ *//; s/ *$//')"
+          [ -z "${var_name}" ] && continue
+          if [ -z "${!var_name:-}" ]; then
+            printf '%s\n' "${var_name}" >> "${missing_file}"
+            missing_vars="${missing_vars}${missing_vars:+,}${var_name}"
+          fi
+        done
+        IFS="${old_ifs}"
+      fi
+
+      printf '%s\n' "${WORKFLOW_PLAN:-No workflow plan recorded for this rehearsal job.}" > "${plan_file}"
+
+      {
+        echo "workflow_name=${WORKFLOW_NAME}"
+        echo "source_workflow_file=${SOURCE_WORKFLOW_FILE}"
+        echo "workflow_class=${WORKFLOW_CLASS}"
+        echo "execute_flag_name=${EXECUTE_FLAG_NAME:-none}"
+        echo "execute_flag_value=${execute_value}"
+        echo "required_vars=${REQUIRED_VARS:-none}"
+        echo "missing_vars=${missing_vars:-none}"
+        echo "notes=${WORKFLOW_NOTES:-none}"
+        echo "production_guard=This rehearsal job must not push to DockerHub or any production registry. Only STAGING_* destinations are allowed when execution is enabled."
+      } | tee "${status_file}"
+
+      if [ "${execute_value}" != "true" ]; then
+        echo "plan-only" | tee "${mode_file}"
+        exit 0
+      fi
+
+      if [ -n "${missing_vars}" ]; then
+        echo "blocked-missing-vars" | tee "${mode_file}"
+        exit 0
+      fi
+
+      echo "execution-requested-prereqs-satisfied-but-concrete-runtime-steps-not-yet-implemented" | tee "${mode_file}"
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/${WORKFLOW_SLUG}-status.txt
+      - rehearsal/${WORKFLOW_SLUG}-mode.txt
+      - rehearsal/${WORKFLOW_SLUG}-plan.txt
+      - rehearsal/${WORKFLOW_SLUG}-missing-vars.txt
 
 format-and-vet:
   stage: verify
@@ -174,3 +247,441 @@ fossa-scan:
     paths:
       - fossa-mode.txt
       - fossa-scan.log
+
+build-test-push-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+  variables:
+    WORKFLOW_SLUG: build-test-push-workflow
+    WORKFLOW_NAME: Build and Test
+    SOURCE_WORKFLOW_FILE: .github/workflows/build-test-push-workflow.yml
+    WORKFLOW_CLASS: build
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_BUILD_TEST_PUSH
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_COSIGN_PRIVATE_KEY,STAGING_COSIGN_PUBLIC_KEY,STAGING_COSIGN_PASSWORD
+    WORKFLOW_NOTES: Base verify and test coverage is already live in GitLab CI. This rehearsal job tracks the remaining image build, signing, Trivy scan, and smoke-test path.
+    WORKFLOW_PLAN: |
+      1. Build the operator image only against a STAGING_ECR_REPOSITORY target.
+      2. Sign and verify only the staging image with STAGING_COSIGN_* material.
+      3. Run the Trivy image scan and publish the SARIF-equivalent artifact in GitLab.
+      4. Run EKS smoke tests only against staging subnets, buckets, and clusters.
+
+distroless-build-test-push-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+  variables:
+    WORKFLOW_SLUG: distroless-build-test-push-workflow
+    WORKFLOW_NAME: Build and Test Distroless
+    SOURCE_WORKFLOW_FILE: .github/workflows/distroless-build-test-push-workflow.yml
+    WORKFLOW_CLASS: build-variant
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_DISTROLESS_BUILD
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_COSIGN_PRIVATE_KEY,STAGING_COSIGN_PUBLIC_KEY,STAGING_COSIGN_PASSWORD
+    WORKFLOW_NOTES: This job tracks the distroless image, signing, and smoke-test path. Production DockerHub publication remains explicitly out of scope for this rehearsal.
+    WORKFLOW_PLAN: |
+      1. Build the distroless operator image to a staging registry only.
+      2. Sign and verify the distroless staging image.
+      3. Rehearse the distroless smoke-test path against staging EKS resources.
+
+int-test-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+  variables:
+    WORKFLOW_SLUG: int-test-workflow
+    WORKFLOW_NAME: Integration Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/int-test-workflow.yml
+    WORKFLOW_CLASS: integration-eks
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_EKS_INTEGRATION
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    WORKFLOW_NOTES: This job tracks the full EKS integration matrix against non-production AWS targets only.
+    WORKFLOW_PLAN: |
+      1. Build the operator image into the staging ECR repository.
+      2. Mirror the enterprise image into staging ECR only.
+      3. Create an ephemeral staging EKS cluster and run the integration matrix.
+      4. Collect logs, run cleanup, and tear the cluster down.
+
+namespace-scope-int-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: namespace-scope-int-workflow
+    WORKFLOW_NAME: Namespace-scope Operator Integration Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/namespace-scope-int-workflow.yml
+    WORKFLOW_CLASS: integration-eks-namespace-scope
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_NAMESPACE_SCOPE_INTEGRATION
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    WORKFLOW_NOTES: This workflow is schedule-driven in GitHub. The GitLab rehearsal keeps it schedule-driven, with an MR manual hook for non-production validation.
+    WORKFLOW_PLAN: |
+      1. Run the namespace-scope integration matrix with CLUSTER_WIDE=false.
+      2. Use staging EKS resources only.
+      3. Preserve log collection and teardown in the same job flow.
+
+manual-int-test-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: manual-int-test-workflow
+    WORKFLOW_NAME: Manual Integration Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/manual-int-test-workflow.yml
+    WORKFLOW_CLASS: integration-eks-manual
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_MANUAL_INTEGRATION
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    WORKFLOW_NOTES: This workflow remains manually invoked in GitLab. The execution path must use staging-only inputs and must not publish operator images to DockerHub.
+    WORKFLOW_PLAN: |
+      1. Accept CLUSTER_WIDE as a GitLab manual variable.
+      2. Build and publish only to staging ECR.
+      3. Run the integration suite against ephemeral staging EKS resources.
+      4. Do not push the int tag to DockerHub during rehearsal or production cutover.
+
+nightly-int-test-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: nightly-int-test-workflow
+    WORKFLOW_NAME: Nightly Integration Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/nightly-int-test-workflow.yml
+    WORKFLOW_CLASS: integration-eks-nightly
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_NIGHTLY_INTEGRATION
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    WORKFLOW_NOTES: This job maps the scheduled nightly path. The legacy DockerHub edge publication is intentionally excluded from the staging rehearsal.
+    WORKFLOW_PLAN: |
+      1. Build the operator image in staging ECR from develop.
+      2. Run the nightly EKS integration suite against ephemeral staging infrastructure.
+      3. Replace DockerHub edge publication with a staging-only validation artifact during rehearsal.
+
+int-test-azure-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+  variables:
+    WORKFLOW_SLUG: int-test-azure-workflow
+    WORKFLOW_NAME: Integration Test on Azure Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/int-test-azure-workflow.yml
+    WORKFLOW_CLASS: integration-azure
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_AZURE_INTEGRATION
+    REQUIRED_VARS: STAGING_AZURE_ACR_LOGIN_SERVER,STAGING_AZURE_ACR_DOCKER_USERNAME,STAGING_AZURE_ACR_DOCKER_PASSWORD,STAGING_AZURE_CREDENTIALS,STAGING_AZURE_RESOURCE_GROUP_NAME,STAGING_AZURE_CONTAINER_REGISTRY,STAGING_AZURE_STORAGE_ACCOUNT,STAGING_AZURE_STORAGE_ACCOUNT_KEY,STAGING_AZURE_TEST_CONTAINER,STAGING_AZURE_INDEXES_CONTAINER
+    WORKFLOW_NOTES: This workflow provisions and tears down AKS resources. It must stay disabled until the Azure staging credential set is loaded.
+    WORKFLOW_PLAN: |
+      1. Build the operator image in staging ACR only.
+      2. Provision a disposable AKS cluster in the staging resource group.
+      3. Run the Azure sanity integration path and collect logs.
+      4. Delete the staging AKS cluster at the end of the run.
+
+int-test-gcp-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+  variables:
+    WORKFLOW_SLUG: int-test-gcp-workflow
+    WORKFLOW_NAME: Integration Test on GCP Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/int-test-gcp-workflow.yml
+    WORKFLOW_CLASS: integration-gcp
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_GCP_INTEGRATION
+    REQUIRED_VARS: STAGING_GCP_ARTIFACT_REGISTRY,STAGING_GCP_SERVICE_ACCOUNT_KEY,STAGING_GCP_PROJECT_ID,STAGING_GCP_REGION,STAGING_GCP_ZONE,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    WORKFLOW_NOTES: This workflow provisions and tears down GKE resources. It must remain pointed at staging-only GCP projects and registries.
+    WORKFLOW_PLAN: |
+      1. Build the operator image in staging Artifact Registry only.
+      2. Provision a disposable GKE cluster in the staging project.
+      3. Run the GCP integration matrix and collect logs.
+      4. Delete the staging GKE cluster at the end of the run.
+
+distroless-int-test-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+  variables:
+    WORKFLOW_SLUG: distroless-int-test-workflow
+    WORKFLOW_NAME: Integration Test Workflow Distroless
+    SOURCE_WORKFLOW_FILE: .github/workflows/distroless-int-test-workflow.yml
+    WORKFLOW_CLASS: integration-eks-distroless
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_DISTROLESS_INTEGRATION
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    WORKFLOW_NOTES: This job tracks the distroless integration path and must use staging-only registries and clusters.
+    WORKFLOW_PLAN: |
+      1. Build and pull the distroless operator image from staging ECR only.
+      2. Run the distroless integration suite against staging EKS resources.
+      3. Preserve teardown and log capture exactly as in GitHub.
+
+helm-test-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  variables:
+    WORKFLOW_SLUG: helm-test-workflow
+    WORKFLOW_NAME: Helm Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/helm-test-workflow.yml
+    WORKFLOW_CLASS: integration-helm
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_HELM_TEST
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_TEST_VPC_ENDPOINT_URL
+    WORKFLOW_NOTES: This workflow combines image build, EKS setup, helm packaging, and kuttl-based helm validation. It must remain fully staging-only.
+    WORKFLOW_PLAN: |
+      1. Build the operator image into staging ECR.
+      2. Package the helm chart locally in the pipeline.
+      3. Run kuttl-based helm validation against a disposable staging EKS cluster.
+      4. Do not call the public GitHub Pages helm repository during rehearsal except for read-only validation.
+
+arm-ubuntu-build-test-push-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: arm-ubuntu-build-test-push-workflow
+    WORKFLOW_NAME: Arm Ubuntu Smoke Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/arm-Ubuntu-build-test-push-workflow.yml
+    WORKFLOW_CLASS: build-arm-ubuntu
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_UBUNTU_BUILD
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
+    WORKFLOW_NOTES: This workflow is manual in GitHub and remains manual in GitLab. It must target only staging ARM-compatible registries and images.
+    WORKFLOW_PLAN: |
+      1. Build the ARM Ubuntu operator image against a staging repository only.
+      2. Run the associated smoke-test path against staging-only dependencies.
+
+arm-ubuntu-int-test-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: arm-ubuntu-int-test-workflow
+    WORKFLOW_NAME: Arm Ubuntu Integration Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/arm-Ubuntu-int-test-workflow.yml
+    WORKFLOW_CLASS: integration-arm-ubuntu
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_UBUNTU_INTEGRATION
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    WORKFLOW_NOTES: This workflow requires ARM Ubuntu enterprise images in staging and must not touch production ECR prefixes.
+    WORKFLOW_PLAN: |
+      1. Build the ARM Ubuntu operator image into staging ECR.
+      2. Run the ARM Ubuntu integration suite against staging EKS resources.
+
+arm-rhel-build-test-push-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: arm-rhel-build-test-push-workflow
+    WORKFLOW_NAME: ARM RHEL Build and Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/arm-RHEL-build-test-push-workflow.yml
+    WORKFLOW_CLASS: build-arm-rhel
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_RHEL_BUILD
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
+    WORKFLOW_NOTES: This workflow is manual in GitHub and must stay staging-only in GitLab.
+    WORKFLOW_PLAN: |
+      1. Build the ARM RHEL operator image against staging ECR only.
+      2. Validate the smoke-test prerequisites without touching production registries.
+
+arm-rhel-int-test-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: arm-rhel-int-test-workflow
+    WORKFLOW_NAME: ARM RHEL Integration Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/arm-RHEL-int-test-workflow.yml
+    WORKFLOW_CLASS: integration-arm-rhel
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_RHEL_INTEGRATION
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    WORKFLOW_NOTES: This workflow requires staging ARM RHEL images and staging-only EKS resources.
+    WORKFLOW_PLAN: |
+      1. Build the ARM RHEL operator image into staging ECR.
+      2. Run the ARM RHEL integration path against staging EKS resources.
+
+arm-al2023-build-test-push-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: arm-al2023-build-test-push-workflow
+    WORKFLOW_NAME: Arm AL2023 Smoke Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/arm-AL2023-build-test-push-workflow-AL2023.yml
+    WORKFLOW_CLASS: build-arm-al2023
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_AL2023_BUILD
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
+    WORKFLOW_NOTES: This workflow is manual in GitHub and remains manual in GitLab for the rehearsal.
+    WORKFLOW_PLAN: |
+      1. Build the ARM AL2023 operator image into staging ECR.
+      2. Validate smoke-test prerequisites against staging-only dependencies.
+
+arm-al2023-int-test-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: integration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: arm-al2023-int-test-workflow
+    WORKFLOW_NAME: Arm AL2023 Integration Test Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/arm-AL2023-int-test-workflow.yml
+    WORKFLOW_CLASS: integration-arm-al2023
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_AL2023_INTEGRATION
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    WORKFLOW_NOTES: This workflow requires staging ARM AL2023 images and staging-only EKS resources.
+    WORKFLOW_PLAN: |
+      1. Build the ARM AL2023 operator image into staging ECR.
+      2. Run the ARM AL2023 integration path against staging EKS resources.
+
+pre-release-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: release
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: pre-release-workflow
+    WORKFLOW_NAME: Pre Release Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/pre-release-workflow.yml
+    WORKFLOW_CLASS: release-preparation
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_PRE_RELEASE
+    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET
+    WORKFLOW_NOTES: This workflow mutates release artifacts and versioned outputs. Rehearsal execution must target staging-only release destinations.
+    WORKFLOW_PLAN: |
+      1. Generate pre-release artifacts and version bumps only in a staging branch or disposable project.
+      2. Publish artifacts only to staging release destinations.
+      3. Capture the exact file diffs for later production cutover review.
+
+automated-release-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: release
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: automated-release-workflow
+    WORKFLOW_NAME: Automated Release Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/automated-release-workflow.yml
+    WORKFLOW_CLASS: release-publication
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_AUTOMATED_RELEASE
+    REQUIRED_VARS: STAGING_PUBLIC_ECR_REPOSITORY,STAGING_COSIGN_PRIVATE_KEY,STAGING_COSIGN_PUBLIC_KEY,STAGING_COSIGN_PASSWORD,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET
+    WORKFLOW_NOTES: The GitHub workflow publishes RC and release images. The GitLab rehearsal must use only staging public-repository stand-ins and must not touch production DockerHub or public ECR names.
+    WORKFLOW_PLAN: |
+      1. Build RC and final release images only in staging release registries.
+      2. Generate release artifacts against staging release targets.
+      3. Keep DockerHub publication disabled during rehearsal.
+
+bundle-push-post-release-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: release
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: bundle-push-post-release-workflow
+    WORKFLOW_NAME: Bundle Push Post Release Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/bundle-push-post-release.yml
+    WORKFLOW_CLASS: release-bundle-publication
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_BUNDLE_PUSH_POST_RELEASE
+    REQUIRED_VARS: STAGING_BUNDLE_REGISTRY,STAGING_BUNDLE_PUSH_TOKEN,STAGING_RELEASE_NOTES_TARGET
+    WORKFLOW_NOTES: The original workflow pushes post-release bundles with Docker credentials. The GitLab rehearsal must use staging bundle registries only.
+    WORKFLOW_PLAN: |
+      1. Build the bundle image against a staging bundle registry only.
+      2. Publish bundle metadata to staging destinations only.
+      3. Record the exact bundle push and verification steps for the final runbook.
+
+release-charts-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: release
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: release-charts-workflow
+    WORKFLOW_NAME: Release Charts Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/release.yml
+    WORKFLOW_CLASS: release-charts
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_CHART_RELEASE
+    REQUIRED_VARS: STAGING_CHART_RELEASE_REPOSITORY,STAGING_CHART_RELEASE_TOKEN
+    WORKFLOW_NOTES: GitHub chart-releaser output must be replaced with GitLab-driven chart publication to a staging mirror first. Public GitHub Pages must remain read-only until production cutover.
+    WORKFLOW_PLAN: |
+      1. Package charts in GitLab and publish them to a staging chart release destination.
+      2. Validate the resulting index and asset layout before production cutover.
+      3. Keep the public GitHub Pages helm repo unchanged during rehearsal.
+
+merge-develop-to-main-workflow-rehearsal:
+  extends: .workflow-rehearsal-template
+  stage: administration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+  variables:
+    WORKFLOW_SLUG: merge-develop-to-main-workflow
+    WORKFLOW_NAME: Merge Develop To Main Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/merge-develop-to-main-workflow.yml
+    WORKFLOW_CLASS: release-governance
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_MERGE_DEVELOP_TO_MAIN
+    REQUIRED_VARS: STAGING_RELEASE_VERSION,STAGING_ENTERPRISE_VERSION,STAGING_RELEASE_CANDIDATE_VERSION
+    WORKFLOW_NOTES: The GitHub workflow creates a PR and then drives RC publication. The GitLab equivalent should create an MR and keep all downstream release activity pointed at staging targets.
+    WORKFLOW_PLAN: |
+      1. Create a GitLab MR from develop to main instead of a GitHub PR.
+      2. Validate mergeability and release metadata generation without pushing public artifacts.
+      3. Keep RC image publication confined to staging release repositories.
+
+cla-check-intake-note:
+  extends: .workflow-rehearsal-template
+  stage: administration
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  variables:
+    WORKFLOW_SLUG: cla-check
+    WORKFLOW_NAME: Agreements Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/cla-check.yml
+    WORKFLOW_CLASS: github-intake-only
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_CLA_CHECK
+    REQUIRED_VARS: STAGING_GITHUB_INTAKE_TOKEN
+    WORKFLOW_NOTES: CLA and code-of-conduct checks remain on the GitHub intake surface after cutover. They are not part of the authoritative GitLab merge path.
+    WORKFLOW_PLAN: |
+      1. Keep CLA and CoC automation on the public GitHub intake repository.
+      2. Ensure the GitHub intake workflow never becomes an authoritative merge gate after cutover.
