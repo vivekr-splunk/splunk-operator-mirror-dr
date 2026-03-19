@@ -121,6 +121,14 @@ default:
         exit 0
       fi
 
+      if [ -n "${EXECUTION_SCRIPT_FILE:-}" ]; then
+        cp "${EXECUTION_SCRIPT_FILE}" rehearsal/${WORKFLOW_SLUG}-execution-script.sh
+        chmod +x rehearsal/${WORKFLOW_SLUG}-execution-script.sh
+        sh "${EXECUTION_SCRIPT_FILE}" 2>&1 | tee "${execution_log}"
+        echo "executed-runtime" | tee "${mode_file}"
+        exit 0
+      fi
+
       if [ -n "${EXECUTION_SCRIPT:-}" ]; then
         printf '%s\n' "${EXECUTION_SCRIPT}" > rehearsal/${WORKFLOW_SLUG}-execution-script.sh
         chmod +x rehearsal/${WORKFLOW_SLUG}-execution-script.sh
@@ -353,45 +361,7 @@ build-test-push-rehearsal:
       2. Push only the commit-scoped image tag to internal ECR. Do not update latest.
       3. Record the pushed image reference and digest for downstream scan and integration jobs.
       4. Record Trivy and smoke-test execution as separate downstream rehearsal steps.
-    EXECUTION_SCRIPT: |
-      set -eu
-      export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
-      export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
-      export IMAGE_REF="${STAGING_ECR_REPOSITORY}/splunk/splunk-operator:${CI_COMMIT_SHA}"
-      export ECR_REGISTRY="${STAGING_ECR_REPOSITORY%%/*}"
-      export REPOSITORY_NAME="${IMAGE_REF#${ECR_REGISTRY}/}"
-      export REPOSITORY_NAME="${REPOSITORY_NAME%:*}"
-      export IMAGE_TAG="${CI_COMMIT_SHA}"
-      export ECR_REGION="$(printf '%s' "${STAGING_AWS_DEFAULT_REGION:-}" | tr -d '[:space:]')"
-      export BASE_IMAGE="registry.access.redhat.com/ubi8/ubi-minimal"
-      export BASE_IMAGE_VERSION="8.10-1755105495"
-
-      if [ -z "${ECR_REGION}" ]; then
-        ECR_REGION="$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)"
-      fi
-      if [ -z "${ECR_REGION}" ]; then
-        echo "Unable to determine ECR region from STAGING_AWS_DEFAULT_REGION or ${ECR_REGISTRY}" >&2
-        exit 1
-      fi
-      export AWS_DEFAULT_REGION="${ECR_REGION}"
-      export AWS_REGION="${ECR_REGION}"
-
-      printf '%s\n' "${IMAGE_REF}" > "rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
-      echo "Using staging ECR registry ${ECR_REGISTRY} in region ${ECR_REGION}"
-      docker version
-      aws ecr get-login-password --region "${ECR_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
-      DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" \
-        -f "${CI_PROJECT_DIR}/Dockerfile" \
-        -t "${IMAGE_REF}" \
-        --build-arg BASE_IMAGE="${BASE_IMAGE}" \
-        --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}"
-      docker push "${IMAGE_REF}"
-      aws ecr describe-images \
-        --region "${ECR_REGION}" \
-        --repository-name "${REPOSITORY_NAME}" \
-        --image-ids imageTag="${IMAGE_TAG}" \
-        --query 'imageDetails[0].imageDigest' \
-        --output text > "rehearsal/${WORKFLOW_SLUG}-digest.txt"
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/build-test-push-rehearsal.sh
 
 build-test-push-trivy-scan:
   extends: .workflow-rehearsal-template
@@ -439,31 +409,7 @@ build-test-push-trivy-scan:
       1. Read the staging image reference emitted by the build rehearsal job.
       2. Authenticate to staging ECR only.
       3. Run Trivy against the pushed image and publish SARIF/text artifacts in GitLab.
-    EXECUTION_SCRIPT: |
-      set -eu
-      export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
-      export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
-      export AWS_DEFAULT_REGION="${STAGING_AWS_DEFAULT_REGION}"
-      export IMAGE_REF="$(cat rehearsal/build-test-push-workflow-image-ref.txt)"
-      export ECR_PASSWORD="$(aws ecr get-login-password --region "${AWS_DEFAULT_REGION}")"
-
-      printf '%s\n' "${IMAGE_REF}" > "rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
-
-      trivy image \
-        --username AWS \
-        --password "${ECR_PASSWORD}" \
-        --severity CRITICAL \
-        --ignore-unfixed \
-        --format sarif \
-        --output "rehearsal/${WORKFLOW_SLUG}-trivy-results.sarif" \
-        "${IMAGE_REF}"
-
-      trivy image \
-        --username AWS \
-        --password "${ECR_PASSWORD}" \
-        --severity CRITICAL \
-        --ignore-unfixed \
-        "${IMAGE_REF}" | tee "rehearsal/${WORKFLOW_SLUG}-trivy-results.txt"
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/build-test-push-trivy-scan.sh
 
 distroless-build-test-push-rehearsal:
   extends: .workflow-rehearsal-template

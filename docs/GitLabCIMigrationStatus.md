@@ -79,6 +79,7 @@
   - a real `build-test-push-rehearsal` runtime path using the internal CI image plus plain `docker build` / `docker push` to staging ECR
   - a real `build-test-push-trivy-scan` runtime path that scans the pushed staging image with Trivy
   - the earlier Kaniko attempt was removed after GitLab executed the container with the Kaniko `executor` entrypoint, which prevented the rehearsal shell script from running
+  - the build and Trivy runtime steps now execute checked-in shell scripts under `hack/gitlab-ci/` instead of inline `EXECUTION_SCRIPT` variables because GitLab was pre-expanding parts of the inline shell body before the job shell ran it
   - both runtime paths remain disabled until `STAGING_EXECUTE_BUILD_TEST_PUSH=true` is set
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:
   - `build-test-push-workflow.yml`
