@@ -13,11 +13,11 @@ variables:
   GOFLAGS: "-mod=mod"
 
 default:
-  image: golang:1.23.0
+  image: golang:1.24.2
   interruptible: true
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends ca-certificates curl git make
+    - apt-get install -y --no-install-recommends ca-certificates curl git make net-tools
     - go version
   cache:
     key: "go-${CI_COMMIT_REF_SLUG}"
