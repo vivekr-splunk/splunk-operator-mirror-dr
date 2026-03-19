@@ -64,6 +64,12 @@
 - The bias-language job installs the linter dependencies explicitly and runs the linter from its own checkout directory with an explicit error-file path to avoid GitHub-only assumptions in the helper tool.
 - The `kubectl-splunk` job uses the actual package path `tools/kubectl-splunk`.
 - The workflow-rehearsal scaffold template now uses the same internal CI base image and still clears inherited `before_script` and artifact `dependencies` so rehearsal-plan jobs do not execute the repository-wide bootstrap.
+- The workflow-rehearsal scaffold now emits a dedicated `context.txt` artifact for each job with safe CI metadata:
+  - observed timestamp
+  - pipeline mode
+  - pipeline and job URLs
+  - commit SHA and ref
+  - execution script source file
 - The rehearsal project now carries a first set of copied `STAGING_*` variables sourced from the internal GitLab CI project `splunk-operator/splunk-operator-cicd`:
   - `STAGING_ECR_REPOSITORY`
   - `STAGING_AWS_ACCESS_KEY_ID`
@@ -78,13 +84,14 @@
 - The standard build workflow class now includes:
   - a real `build-test-push-rehearsal` runtime path using the internal CI image plus plain `docker build` / `docker push` to staging ECR
   - a real `build-test-push-trivy-scan` runtime path that scans the pushed staging image with Trivy
+  - shared shell helpers now live under `hack/gitlab-ci/lib/` so ECR target resolution, region resolution, file prechecks, and runtime context emission stay modular instead of being duplicated in each job script
   - the earlier Kaniko attempt was removed after GitLab executed the container with the Kaniko `executor` entrypoint, which prevented the rehearsal shell script from running
   - the build and Trivy runtime steps now execute checked-in shell scripts under `hack/gitlab-ci/` instead of inline `EXECUTION_SCRIPT` variables because GitLab was pre-expanding parts of the inline shell body before the job shell ran it
   - the Trivy installer pin is now `v0.69.4`; the older `0.57.1` reference had aged out upstream and caused the scan job to fail during bootstrap before any scan logic ran
   - the Trivy scan job now overrides `dependencies` to pull artifacts from `build-test-push-rehearsal`; the shared rehearsal template intentionally clears dependencies by default, which otherwise prevented the scan job from reading the emitted image-reference artifact
   - a web-triggered fast path now exists for debug loops:
     - set `REHEARSAL_PIPELINE_MODE=build_scan`
-    - this skips the already-proven verify, test, and security stages
+    - this skips the already-proven verify, test, and security jobs
     - it runs only the standard build rehearsal plus the dependent Trivy scan so failing image-path changes can be validated quickly before rerunning the full MR workflow
   - both runtime paths remain disabled until `STAGING_EXECUTE_BUILD_TEST_PUSH=true` is set
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:

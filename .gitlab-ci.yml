@@ -61,12 +61,14 @@ default:
       mode_file="rehearsal/${WORKFLOW_SLUG}-mode.txt"
       plan_file="rehearsal/${WORKFLOW_SLUG}-plan.txt"
       missing_file="rehearsal/${WORKFLOW_SLUG}-missing-vars.txt"
+      context_file="rehearsal/${WORKFLOW_SLUG}-context.txt"
       execution_log="rehearsal/${WORKFLOW_SLUG}-execution.log"
       image_ref_file="rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
       digest_file="rehearsal/${WORKFLOW_SLUG}-digest.txt"
       trivy_sarif_file="rehearsal/${WORKFLOW_SLUG}-trivy-results.sarif"
       trivy_text_file="rehearsal/${WORKFLOW_SLUG}-trivy-results.txt"
       : > "${missing_file}"
+      : > "${context_file}"
       : > "${execution_log}"
       : > "${image_ref_file}"
       : > "${digest_file}"
@@ -98,6 +100,19 @@ default:
       fi
 
       printf '%s\n' "${WORKFLOW_PLAN:-No workflow plan recorded for this rehearsal job.}" > "${plan_file}"
+
+      {
+        echo "observed_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "pipeline_mode=${REHEARSAL_PIPELINE_MODE:-full}"
+        echo "pipeline_source=${CI_PIPELINE_SOURCE:-unknown}"
+        echo "pipeline_id=${CI_PIPELINE_ID:-unknown}"
+        echo "pipeline_url=${CI_PIPELINE_URL:-unknown}"
+        echo "job_id=${CI_JOB_ID:-unknown}"
+        echo "job_url=${CI_JOB_URL:-unknown}"
+        echo "commit_sha=${CI_COMMIT_SHA:-unknown}"
+        echo "ref_name=${CI_COMMIT_REF_NAME:-unknown}"
+        echo "execution_script_file=${EXECUTION_SCRIPT_FILE:-none}"
+      } > "${context_file}"
 
       {
         echo "workflow_name=${WORKFLOW_NAME}"
@@ -147,6 +162,7 @@ default:
       - rehearsal/${WORKFLOW_SLUG}-mode.txt
       - rehearsal/${WORKFLOW_SLUG}-plan.txt
       - rehearsal/${WORKFLOW_SLUG}-missing-vars.txt
+      - rehearsal/${WORKFLOW_SLUG}-context.txt
       - rehearsal/${WORKFLOW_SLUG}-execution.log
       - rehearsal/${WORKFLOW_SLUG}-image-ref.txt
       - rehearsal/${WORKFLOW_SLUG}-digest.txt
@@ -155,6 +171,10 @@ default:
 
 format-and-vet:
   stage: verify
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
+      when: never
+    - when: on_success
   variables:
     GOFLAGS: "-mod=mod"
   script:
@@ -163,6 +183,10 @@ format-and-vet:
 
 bias-language:
   stage: verify
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
+      when: never
+    - when: on_success
   before_script:
     - |
       set -eu
@@ -201,6 +225,10 @@ bias-language:
 
 unit-tests:
   stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
+      when: never
+    - when: on_success
   needs:
     - format-and-vet
   variables:
@@ -222,6 +250,10 @@ unit-tests:
 
 kubectl-splunk-tests:
   stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
+      when: never
+    - when: on_success
   before_script:
     - |
       set -eu
