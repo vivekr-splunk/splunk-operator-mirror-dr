@@ -160,7 +160,7 @@ bias-language:
       rm -rf .cache/go
       if command -v apt-get >/dev/null 2>&1; then
         apt-get update
-        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ripgrep python3 python3-pip
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ripgrep python3 python3-pip python3-venv
       elif command -v dnf >/dev/null 2>&1; then
         dnf install -y git ripgrep python3 python3-pip
       elif command -v yum >/dev/null 2>&1; then
@@ -174,8 +174,10 @@ bias-language:
       python3 --version
   script:
     - git clone https://github.com/splunk/biased-lang-linter.git .biaslanguage
-    - python3 -m pip install --upgrade pip
-    - python3 -m pip install -r .biaslanguage/requirements.txt
+    - python3 -m venv /tmp/bias-language-venv
+    - . /tmp/bias-language-venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r .biaslanguage/requirements.txt
     - cd .biaslanguage
     - python3 run_json.py --path="$CI_PROJECT_DIR" --err_file=err_biased_lang.log
   artifacts:
@@ -217,7 +219,7 @@ kubectl-splunk-tests:
       rm -rf .cache/go
       if command -v apt-get >/dev/null 2>&1; then
         apt-get update
-        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-pip
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-pip python3-venv
       elif command -v dnf >/dev/null 2>&1; then
         dnf install -y python3 python3-pip
       elif command -v yum >/dev/null 2>&1; then
@@ -230,14 +232,16 @@ kubectl-splunk-tests:
       fi
       python3 --version
   script:
-    - python3 -m pip install --upgrade pip
-    - python3 -m pip install -r tools/kubectl-splunk/requirements.txt
-    - python3 -m pip install -e tools/kubectl-splunk
-    - python3 -m pip install coverage pytest
+    - python3 -m venv /tmp/kubectl-splunk-venv
+    - . /tmp/kubectl-splunk-venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r tools/kubectl-splunk/requirements.txt
+    - pip install -e tools/kubectl-splunk
+    - pip install coverage pytest
     - cd tools/kubectl-splunk
-    - python3 -m coverage run -m unittest discover -s tests
-    - python3 -m coverage report | tee "$CI_PROJECT_DIR/kubectl-splunk-coverage-summary.txt"
-    - python3 -m coverage xml -o "$CI_PROJECT_DIR/kubectl-splunk-coverage.xml"
+    - coverage run -m unittest discover -s tests
+    - coverage report | tee "$CI_PROJECT_DIR/kubectl-splunk-coverage-summary.txt"
+    - coverage xml -o "$CI_PROJECT_DIR/kubectl-splunk-coverage.xml"
   artifacts:
     when: always
     paths:
@@ -264,7 +268,7 @@ semgrep-scan:
       fi
       if command -v apt-get >/dev/null 2>&1; then
         apt-get update
-        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-pip
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-pip python3-venv
       elif command -v dnf >/dev/null 2>&1; then
         dnf install -y python3 python3-pip
       elif command -v yum >/dev/null 2>&1; then
@@ -275,8 +279,10 @@ semgrep-scan:
         echo "No supported package manager found in base image" >&2
         exit 1
       fi
-      python3 -m pip install --upgrade pip
-      python3 -m pip install semgrep
+      python3 -m venv /tmp/semgrep-venv
+      . /tmp/semgrep-venv/bin/activate
+      pip install --upgrade pip
+      pip install semgrep
       echo "Running semgrep ci with GitLab-managed token" | tee semgrep-mode.txt
       semgrep ci --json --output semgrep-results.json
   artifacts:
@@ -382,7 +388,7 @@ build-test-push-trivy-scan:
       set -eu
       if command -v apt-get >/dev/null 2>&1; then
         apt-get update
-        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash curl jq python3 python3-pip
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash curl jq python3 python3-pip python3-venv
       elif command -v dnf >/dev/null 2>&1; then
         dnf install -y bash curl jq python3 python3-pip
       elif command -v yum >/dev/null 2>&1; then
@@ -393,7 +399,9 @@ build-test-push-trivy-scan:
         echo "No supported package manager found in base image" >&2
         exit 1
       fi
-      python3 -m pip install --no-cache-dir awscli
+      python3 -m venv /tmp/trivy-tools-venv
+      . /tmp/trivy-tools-venv/bin/activate
+      pip install --no-cache-dir awscli
       TRIVY_VERSION="0.57.1"
       curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin "${TRIVY_VERSION}"
       trivy --version
