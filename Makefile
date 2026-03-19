@@ -413,10 +413,7 @@ cleanup:
 .PHONY: setup/ginkgo
 setup/ginkgo:
 	@echo Installing ginkgo
-	@go get github.com/onsi/ginkgo/v2
-	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
-	@echo Installing gomega
-	@go get github.com/onsi/gomega/...
+	@go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@v2.23.4
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize

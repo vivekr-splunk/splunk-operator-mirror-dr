@@ -48,20 +48,22 @@
 
 - This file tracks the live rehearsal state in GitLab.
 - The bootstrap CI file currently uses permissive `workflow:rules` so job execution can be proven before branch and MR gating is tightened.
-- The bootstrap CI file is aligned to `go.mod` rather than the stale `.env` value, so it uses Go `1.24.2`.
+- The bootstrap CI file now uses the internal CI base image `docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.25-aws:5.1.0` to avoid unauthenticated Docker Hub pull-rate limits on shared runners.
 - The bootstrap verify job follows the current GitHub workflow behavior by running `make fmt` without a post-format diff gate.
 - The bootstrap pipeline now uses job-specific module flags: `format-and-vet` keeps writable module resolution, while `unit-tests` disables workspace mode and clears `GOFLAGS` before `make test`.
 - Go caches now live outside the repository tree so `controller-gen` does not scan downloaded modules under `paths="./..."`.
 - The pipeline also uses a new GitLab cache key and clears any restored `.cache/go` directory before job execution so stale archives from older rehearsals do not reintroduce repo-local module trees.
-- The `envtest` helper in `Makefile` is pinned to `sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20240813183042-b901db121e1f`, which is the installable nested-module revision from the controller-runtime `v0.19.0` source tree. `@latest` now tracks a `go 1.25.0` tool module, while this repo's current rehearsal baseline is Go `1.24.2`.
+- The `envtest` helper in `Makefile` is pinned to `sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20240813183042-b901db121e1f`, which is the installable nested-module revision from the controller-runtime `v0.19.0` source tree.
+- The `ginkgo` helper in `Makefile` is now pinned to `github.com/onsi/ginkgo/v2/ginkgo@v2.23.4` and no longer runs `go get`, so `make vet` does not rewrite module dependencies under the internal Go `1.25.x` base image.
 - The `enterprise` package test suite exposed an environment-dependent assumption in `TestCreateAppDownloadDir`: the old invalid path `/xyzzz.txt` only failed on non-root shells. The test now uses a child path under a real file, and `createAppDownloadDir` now returns non-`ErrNotExist` stat errors instead of silently swallowing them.
 - The first security slice adds `semgrep-scan` and `fossa-scan` jobs with GitHub-equivalent MR and `main`/`develop` trigger intent. These jobs are staging-safe: if `SEMGREP_APP_TOKEN` or `FOSSA_API_TOKEN` is not loaded in GitLab yet, they emit an explicit skip artifact instead of silently disappearing from the pipeline.
 - Current registry policy for the rehearsal is internal-registry-only:
   - standard, distroless, ARM, smoke, integration, helm, and scan paths should use staging ECR, ACR, GAR, or internal bundle/chart targets only
   - DockerHub stays out of scope until the pre-release and release publication workflows are implemented intentionally later
+- The bias-language, `kubectl-splunk`, Semgrep, and Trivy helper paths now use Python virtual environments on the internal CI image so they remain compatible with Debian PEP 668 package-management protections.
 - The bias-language job installs the linter dependencies explicitly and runs the linter from its own checkout directory with an explicit error-file path to avoid GitHub-only assumptions in the helper tool.
-- The `kubectl-splunk` job uses the actual package path `tools/kubectl-splunk` and forces `PIP_INDEX_URL=https://pypi.org/simple` so rehearsal execution is not coupled to local internal pip configuration.
-- The workflow-rehearsal scaffold template now clears inherited `before_script` and artifact `dependencies` so its `alpine` jobs do not try to run the repository-wide `apt-get` bootstrap intended for the Go-based jobs.
+- The `kubectl-splunk` job uses the actual package path `tools/kubectl-splunk`.
+- The workflow-rehearsal scaffold template now uses the same internal CI base image and still clears inherited `before_script` and artifact `dependencies` so rehearsal-plan jobs do not execute the repository-wide bootstrap.
 - The rehearsal project now carries a first set of copied `STAGING_*` variables sourced from the internal GitLab CI project `splunk-operator/splunk-operator-cicd`:
   - `STAGING_ECR_REPOSITORY`
   - `STAGING_AWS_ACCESS_KEY_ID`
