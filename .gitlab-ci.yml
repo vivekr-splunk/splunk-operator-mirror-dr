@@ -172,7 +172,7 @@ default:
 format-and-vet:
   stage: verify
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
       when: never
     - when: on_success
   variables:
@@ -184,7 +184,7 @@ format-and-vet:
 bias-language:
   stage: verify
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
       when: never
     - when: on_success
   before_script:
@@ -226,7 +226,7 @@ bias-language:
 unit-tests:
   stage: test
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
       when: never
     - when: on_success
   needs:
@@ -251,7 +251,7 @@ unit-tests:
 kubectl-splunk-tests:
   stage: test
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
       when: never
     - when: on_success
   before_script:
@@ -378,7 +378,7 @@ build-test-push-rehearsal:
   allow_failure: false
   before_script: []
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -430,7 +430,7 @@ build-test-push-trivy-scan:
       trivy --version
       aws --version
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
