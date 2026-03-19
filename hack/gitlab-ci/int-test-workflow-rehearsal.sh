@@ -10,6 +10,10 @@ pod_log_dir="rehearsal/${WORKFLOW_SLUG}-pod-logs"
 integration_junit="rehearsal/${WORKFLOW_SLUG}-inttest-junit.xml"
 integration_skip_regex='^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$'
 
+log_step() {
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
+}
+
 : > "${context_file}"
 : > "${cleanup_log}"
 : > "${cluster_log}"
@@ -95,12 +99,19 @@ cleanup_and_exit() {
   trap - EXIT INT TERM
   set +e
 
+  log_step "cleanup:start" | tee -a "${cleanup_log}" >/dev/null
+
   copy_if_exists "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}" >/dev/null 2>&1 || true
 
+  log_step "cleanup:collect-test-logs" | tee -a "${cleanup_log}" >/dev/null
   find "${CI_PROJECT_DIR}/test" -name "*.log" -type f -exec cp {} "${pod_log_dir}/" \; >> "${cleanup_log}" 2>&1 || cleanup_rc=1
+  log_step "cleanup:make-cleanup" | tee -a "${cleanup_log}" >/dev/null
   make cleanup >> "${cleanup_log}" 2>&1 || cleanup_rc=1
+  log_step "cleanup:make-clean" | tee -a "${cleanup_log}" >/dev/null
   make clean >> "${cleanup_log}" 2>&1 || cleanup_rc=1
+  log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
   make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
+  log_step "cleanup:complete cleanup_rc=${cleanup_rc}" | tee -a "${cleanup_log}" >/dev/null
 
   if [ "${rc}" -ne 0 ]; then
     exit "${rc}"
@@ -115,22 +126,43 @@ cleanup_and_exit() {
 
 trap 'cleanup_and_exit $?' EXIT INT TERM
 
+log_step "tools:install kubectl=${KUBECTL_VERSION} eksctl=${EKSCTL_VERSION}"
 install_kubectl_version "${KUBECTL_VERSION}" "${ci_bin_dir}"
 install_eksctl_version "${EKSCTL_VERSION}" "${ci_bin_dir}"
 
+log_step "build-helpers:setup-ginkgo:start"
 make setup/ginkgo
-make kustomize
+log_step "build-helpers:setup-ginkgo:complete"
 
+log_step "build-helpers:kustomize:start"
+make kustomize
+log_step "build-helpers:kustomize:complete"
+
+log_step "versions:start"
 kubectl version --client=true
 eksctl version
 docker version
 aws --version
+log_step "versions:complete"
 
+log_step "registry:ecr-login ${ECR_REGISTRY}"
 aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+log_step "registry:ecr-login:complete"
 
+log_step "cluster:up ${TEST_CLUSTER_NAME}"
 make cluster-up 2>&1 | tee -a "${cluster_log}"
+log_step "cluster:up:complete"
+
+log_step "cluster:addons:metrics-server"
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml 2>&1 | tee -a "${cluster_log}"
+log_step "cluster:addons:metrics-server:complete"
+
+log_step "cluster:addons:dashboard"
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml 2>&1 | tee -a "${cluster_log}"
+log_step "cluster:addons:dashboard:complete"
+
+log_step "tests:int-test:start focus=${TEST_FOCUS}"
 make int-test
+log_step "tests:int-test:complete"
 
 copy_if_exists "${CI_PROJECT_DIR}/inttest-junit.xml" "${integration_junit}" >/dev/null 2>&1 || true

@@ -75,7 +75,13 @@ endif
 SCANNER_DATE := `date +%Y-%m-%d`
 SCANNER_DATE_YEST := `TZ=GMT+24 +%Y:%m:%d`
 SCANNER_VERSION := v8
-SCANNER_LOCALIP := $(shell ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | awk '{print $1}' | head -n 1)
+SCANNER_LOCALIP := $(shell hostname -I 2>/dev/null | awk '{print $$1}' | grep -v '^127\.' | head -n 1)
+ifeq ($(strip $(SCANNER_LOCALIP)),)
+SCANNER_LOCALIP := $(shell ip -o -4 addr show scope global 2>/dev/null | awk '{split($$4, addr, "/"); print addr[1]; exit}')
+endif
+ifeq ($(strip $(SCANNER_LOCALIP)),)
+SCANNER_LOCALIP := $(shell ifconfig 2>/dev/null | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | awk '{print $$1}' | head -n 1)
+endif
 ifeq ($(shell uname), Linux)
 	SCANNER_FILE = clair-scanner_linux_amd64
 else ifeq ($(shell uname), Darwin)
