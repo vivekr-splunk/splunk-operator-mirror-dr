@@ -70,6 +70,7 @@ const (
 	databasesReady  conditionTypes = "DatabasesReady"
 	secretsReady    conditionTypes = "SecretsReady"
 	configMapsReady conditionTypes = "ConfigMapsReady"
+	configMapReady  conditionTypes = "ConfigMapReady"
 	// TODO - to use in the future implementation
 	// privilegesReady conditionTypes = "PrivilegesReady"
 
@@ -106,7 +107,6 @@ const (
 	reasonAllInstancesReady          conditionReasons = "AllInstancesReady"
 
 	// Additional condition reasons for mapping CNPG cluster statuses
-	reasonCNPGClusterNotHealthy  conditionReasons = "CNPGClusterNotHealthy"
 	reasonCNPGClusterHealthy     conditionReasons = "CNPGClusterHealthy"
 	reasonCNPGProvisioning       conditionReasons = "CNPGClusterProvisioning"
 	reasonCNPGSwitchover         conditionReasons = "CNPGSwitchover"
