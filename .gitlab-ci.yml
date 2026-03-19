@@ -281,26 +281,14 @@ fossa-scan:
 build-test-push-rehearsal:
   extends: .workflow-rehearsal-template
   stage: build
-  image: docker:27.5.1-git
+  image: gcr.io/kaniko-project/executor:v1.23.2-debug
   allow_failure: false
-  services:
-    - name: docker:27.5.1-dind
-      command:
-        - --tls=false
-  before_script:
-    - apk add --no-cache bash curl jq make python3 py3-pip
-    - pip3 install --no-cache-dir awscli
-    - docker version
-    - docker buildx version
-    - aws --version
+  before_script: []
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
   variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-    DOCKER_DRIVER: overlay2
     WORKFLOW_SLUG: build-test-push-workflow
     WORKFLOW_NAME: Build and Test
     SOURCE_WORKFLOW_FILE: .github/workflows/build-test-push-workflow.yml
@@ -319,22 +307,26 @@ build-test-push-rehearsal:
       export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
       export AWS_DEFAULT_REGION="${STAGING_AWS_DEFAULT_REGION}"
       export IMAGE_REF="${STAGING_ECR_REPOSITORY}/splunk/splunk-operator:${CI_COMMIT_SHA}"
-      export PLATFORMS="linux/amd64"
-      export DOCKER_BUILDKIT=1
+      export BASE_IMAGE="registry.access.redhat.com/ubi8/ubi-minimal"
+      export BASE_IMAGE_VERSION="8.10-1755105495"
 
       printf '%s\n' "${IMAGE_REF}" > "rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
 
-      aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | \
-        docker login --username AWS --password-stdin "${STAGING_ECR_REPOSITORY}"
+      mkdir -p /kaniko/.docker
+      printf '{"credHelpers":{"%s":"ecr-login"}}\n' "${STAGING_ECR_REPOSITORY}" > /kaniko/.docker/config.json
 
-      make docker-buildx IMG="${IMAGE_REF}" PLATFORMS="${PLATFORMS}"
-
-      docker buildx imagetools inspect "${IMAGE_REF}" | tee "rehearsal/${WORKFLOW_SLUG}-digest.txt"
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "${CI_PROJECT_DIR}/Dockerfile" \
+        --destination "${IMAGE_REF}" \
+        --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+        --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
+        --digest-file "rehearsal/${WORKFLOW_SLUG}-digest.txt"
 
 build-test-push-trivy-scan:
   extends: .workflow-rehearsal-template
   stage: image_scan
-  image: docker:27.5.1-git
+  image: alpine:3.20
   allow_failure: false
   needs:
     - job: build-test-push-rehearsal

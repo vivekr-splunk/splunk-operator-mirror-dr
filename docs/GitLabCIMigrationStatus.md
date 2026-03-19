@@ -74,7 +74,7 @@
   - `STAGING_TEST_VPC_ENDPOINT_URL`
 - Cosign variables were intentionally not copied into the rehearsal project. The current decision is to defer signing until the later release-workflow migration slice rather than reuse production signing material.
 - The standard build workflow class now includes:
-  - a real `build-test-push-rehearsal` runtime path using `docker:dind`, `awscli`, and `make docker-buildx`
+  - a real `build-test-push-rehearsal` runtime path using Kaniko for daemonless ECR publication on shared runners
   - a real `build-test-push-trivy-scan` runtime path that scans the pushed staging image with Trivy
   - both runtime paths remain disabled until `STAGING_EXECUTE_BUILD_TEST_PUSH=true` is set
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:
