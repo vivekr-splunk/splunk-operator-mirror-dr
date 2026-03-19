@@ -76,8 +76,9 @@
   - `STAGING_TEST_VPC_ENDPOINT_URL`
 - Cosign variables were intentionally not copied into the rehearsal project. The current decision is to defer signing until the later release-workflow migration slice rather than reuse production signing material.
 - The standard build workflow class now includes:
-  - a real `build-test-push-rehearsal` runtime path using Kaniko for daemonless ECR publication on shared runners
+  - a real `build-test-push-rehearsal` runtime path using the internal CI image plus plain `docker build` / `docker push` to staging ECR
   - a real `build-test-push-trivy-scan` runtime path that scans the pushed staging image with Trivy
+  - the earlier Kaniko attempt was removed after GitLab executed the container with the Kaniko `executor` entrypoint, which prevented the rehearsal shell script from running
   - both runtime paths remain disabled until `STAGING_EXECUTE_BUILD_TEST_PUSH=true` is set
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:
   - `build-test-push-workflow.yml`
