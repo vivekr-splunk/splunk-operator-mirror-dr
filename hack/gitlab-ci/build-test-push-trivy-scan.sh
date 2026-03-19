@@ -7,7 +7,7 @@ export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
 export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
 context_file="rehearsal/${WORKFLOW_SLUG}-runtime-context.txt"
 : > "${context_file}"
-TRIVY_VERSION="0.69.4"
+TRIVY_RELEASE="${STAGING_TRIVY_RELEASE:-latest}"
 
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update
@@ -26,7 +26,25 @@ fi
 python3 -m venv /tmp/trivy-tools-venv
 . /tmp/trivy-tools-venv/bin/activate
 pip install --no-cache-dir awscli
-curl -fsSL -o /tmp/trivy.tgz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+trivy_release_api="https://api.github.com/repos/aquasecurity/trivy/releases/latest"
+if [ "${TRIVY_RELEASE}" != "latest" ]; then
+  trivy_release_tag="${TRIVY_RELEASE#v}"
+  trivy_release_api="https://api.github.com/repos/aquasecurity/trivy/releases/tags/v${trivy_release_tag}"
+fi
+
+trivy_release_json="$(curl -fsSL \
+  -H 'Accept: application/vnd.github+json' \
+  -H 'X-GitHub-Api-Version: 2022-11-28' \
+  "${trivy_release_api}")"
+TRIVY_TAG="$(printf '%s' "${trivy_release_json}" | jq -r '.tag_name')"
+TRIVY_ASSET_URL="$(printf '%s' "${trivy_release_json}" | jq -r '.assets[] | select(.name | endswith("_Linux-64bit.tar.gz")) | .browser_download_url' | head -n 1)"
+
+if [ -z "${TRIVY_TAG}" ] || [ "${TRIVY_TAG}" = "null" ] || [ -z "${TRIVY_ASSET_URL}" ]; then
+  echo "Unable to resolve Trivy release asset from ${trivy_release_api}" >&2
+  exit 1
+fi
+
+curl -fsSL -o /tmp/trivy.tgz "${TRIVY_ASSET_URL}"
 tar -xzf /tmp/trivy.tgz -C /tmp trivy
 install /tmp/trivy /usr/local/bin/trivy
 trivy --version
@@ -50,7 +68,9 @@ export ECR_PASSWORD="$(aws ecr get-login-password --region "${AWS_DEFAULT_REGION
 append_context "${context_file}" "input_artifact" "rehearsal/build-test-push-workflow-image-ref.txt"
 append_context "${context_file}" "ecr_registry_present" "true"
 append_context "${context_file}" "ecr_region_source" "${RESOLVED_ECR_REGION_SOURCE}"
-append_context "${context_file}" "trivy_version" "${TRIVY_VERSION}"
+append_context "${context_file}" "trivy_release_selector" "${TRIVY_RELEASE}"
+append_context "${context_file}" "trivy_tag" "${TRIVY_TAG}"
+append_context "${context_file}" "trivy_asset_url" "${TRIVY_ASSET_URL}"
 
 printf '%s\n' "${IMAGE_REF}" > "rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
 
