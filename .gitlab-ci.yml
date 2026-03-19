@@ -10,7 +10,8 @@ variables:
   GIT_DEPTH: "0"
   GOCACHE: "$CI_PROJECT_DIR/.cache/go/build"
   GOMODCACHE: "$CI_PROJECT_DIR/.cache/go/pkg/mod"
-  GOFLAGS: "-mod=mod"
+  GOWORK: "off"
+  GOFLAGS: "-mod=readonly"
 
 default:
   image: golang:1.24.2
@@ -38,6 +39,7 @@ unit-tests:
     - format-and-vet
   script:
     - make setup/ginkgo
+    - go mod tidy
     - make test
     - go tool cover -func=coverage.out | tee coverage-summary.txt
   artifacts:
