@@ -1,14 +1,16 @@
 workflow:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_BRANCH == "develop"
-    - if: $CI_PIPELINE_SOURCE == "web"
-    - when: never
+    - when: always
 
 stages:
   - verify
   - test
+
+variables:
+  GIT_DEPTH: "0"
+  GOCACHE: "$CI_PROJECT_DIR/.cache/go/build"
+  GOMODCACHE: "$CI_PROJECT_DIR/.cache/go/pkg/mod"
+  GOFLAGS: "-mod=mod"
 
 default:
   image: golang:1.23.0
@@ -23,11 +25,6 @@ default:
       - .cache/go/build
       - .cache/go/pkg/mod
       - bin/
-  variables:
-    GIT_DEPTH: "0"
-    GOCACHE: "$CI_PROJECT_DIR/.cache/go/build"
-    GOMODCACHE: "$CI_PROJECT_DIR/.cache/go/pkg/mod"
-    GOFLAGS: "-mod=mod"
 
 format-and-vet:
   stage: verify

@@ -28,4 +28,5 @@
 ## Notes
 
 - This file tracks the live rehearsal state in GitLab.
+- The bootstrap CI file currently uses permissive `workflow:rules` so job execution can be proven before branch and MR gating is tightened.
 - Additional workflow classes should be migrated incrementally and validated in staging before production cutover.
