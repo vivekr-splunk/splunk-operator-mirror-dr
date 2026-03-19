@@ -334,7 +334,6 @@ fossa-scan:
 build-test-push-rehearsal:
   extends: .workflow-rehearsal-template
   stage: build
-  image: gcr.io/kaniko-project/executor:v1.23.2-debug
   allow_failure: false
   before_script: []
   rules:
@@ -360,21 +359,27 @@ build-test-push-rehearsal:
       export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
       export AWS_DEFAULT_REGION="${STAGING_AWS_DEFAULT_REGION}"
       export IMAGE_REF="${STAGING_ECR_REPOSITORY}/splunk/splunk-operator:${CI_COMMIT_SHA}"
+      export ECR_REGISTRY="${STAGING_ECR_REPOSITORY%%/*}"
+      export REPOSITORY_NAME="${IMAGE_REF#${ECR_REGISTRY}/}"
+      export REPOSITORY_NAME="${REPOSITORY_NAME%:*}"
+      export IMAGE_TAG="${CI_COMMIT_SHA}"
       export BASE_IMAGE="registry.access.redhat.com/ubi8/ubi-minimal"
       export BASE_IMAGE_VERSION="8.10-1755105495"
 
       printf '%s\n' "${IMAGE_REF}" > "rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
-
-      mkdir -p /kaniko/.docker
-      printf '{"credHelpers":{"%s":"ecr-login"}}\n' "${STAGING_ECR_REPOSITORY}" > /kaniko/.docker/config.json
-
-      /kaniko/executor \
-        --context "${CI_PROJECT_DIR}" \
-        --dockerfile "${CI_PROJECT_DIR}/Dockerfile" \
-        --destination "${IMAGE_REF}" \
+      docker version
+      aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+      DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" \
+        -f "${CI_PROJECT_DIR}/Dockerfile" \
+        -t "${IMAGE_REF}" \
         --build-arg BASE_IMAGE="${BASE_IMAGE}" \
-        --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}" \
-        --digest-file "rehearsal/${WORKFLOW_SLUG}-digest.txt"
+        --build-arg BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION}"
+      docker push "${IMAGE_REF}"
+      aws ecr describe-images \
+        --repository-name "${REPOSITORY_NAME}" \
+        --image-ids imageTag="${IMAGE_TAG}" \
+        --query 'imageDetails[0].imageDigest' \
+        --output text > "rehearsal/${WORKFLOW_SLUG}-digest.txt"
 
 build-test-push-trivy-scan:
   extends: .workflow-rehearsal-template
