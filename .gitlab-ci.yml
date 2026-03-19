@@ -33,6 +33,8 @@ default:
 .workflow-rehearsal-template:
   image: alpine:3.20
   allow_failure: true
+  before_script: []
+  dependencies: []
   script:
     - |
       set -eu

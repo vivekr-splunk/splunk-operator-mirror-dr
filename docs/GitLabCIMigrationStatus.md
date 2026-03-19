@@ -53,6 +53,7 @@
   - DockerHub stays out of scope until the pre-release and release publication workflows are implemented intentionally later
 - The bias-language job installs the linter dependencies explicitly and runs the linter from its own checkout directory with an explicit error-file path to avoid GitHub-only assumptions in the helper tool.
 - The `kubectl-splunk` job uses the actual package path `tools/kubectl-splunk` and forces `PIP_INDEX_URL=https://pypi.org/simple` so rehearsal execution is not coupled to local internal pip configuration.
+- The workflow-rehearsal scaffold template now clears inherited `before_script` and artifact `dependencies` so its `alpine` jobs do not try to run the repository-wide `apt-get` bootstrap intended for the Go-based jobs.
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:
   - `build-test-push-workflow.yml`
   - `distroless-build-test-push-workflow.yml`
