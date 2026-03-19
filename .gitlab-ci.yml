@@ -367,7 +367,7 @@ build-test-push-rehearsal:
       export BASE_IMAGE_VERSION="8.10-1755105495"
 
       if [ -z "${ECR_REGION}" ]; then
-        ECR_REGION="$(printf '%s' "${ECR_REGISTRY}" | sed -n 's#^[0-9][0-9]*\\.dkr\\.ecr\\.\\([^.]*\\)\\.amazonaws\\.com$#\\1#p')"
+        ECR_REGION="$(printf '%s' "${ECR_REGISTRY}" | cut -d. -f4)"
       fi
       if [ -z "${ECR_REGION}" ]; then
         echo "Unable to determine ECR region from STAGING_AWS_DEFAULT_REGION or ${ECR_REGISTRY}" >&2
