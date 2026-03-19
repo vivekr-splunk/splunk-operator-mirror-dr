@@ -19,6 +19,7 @@ variables:
   GOWORK: "off"
   INTERNAL_CI_IMAGE: "docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.25-aws:5.1.0"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  REHEARSAL_PIPELINE_MODE: "full"
 
 default:
   image: $INTERNAL_CI_IMAGE
@@ -345,6 +346,7 @@ build-test-push-rehearsal:
   allow_failure: false
   before_script: []
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -396,6 +398,7 @@ build-test-push-trivy-scan:
       trivy --version
       aws --version
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $REHEARSAL_PIPELINE_MODE == "build_scan"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
