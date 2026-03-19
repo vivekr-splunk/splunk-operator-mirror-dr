@@ -81,6 +81,7 @@
   - the earlier Kaniko attempt was removed after GitLab executed the container with the Kaniko `executor` entrypoint, which prevented the rehearsal shell script from running
   - the build and Trivy runtime steps now execute checked-in shell scripts under `hack/gitlab-ci/` instead of inline `EXECUTION_SCRIPT` variables because GitLab was pre-expanding parts of the inline shell body before the job shell ran it
   - the Trivy installer pin is now `v0.69.4`; the older `0.57.1` reference had aged out upstream and caused the scan job to fail during bootstrap before any scan logic ran
+  - the Trivy scan job now overrides `dependencies` to pull artifacts from `build-test-push-rehearsal`; the shared rehearsal template intentionally clears dependencies by default, which otherwise prevented the scan job from reading the emitted image-reference artifact
   - both runtime paths remain disabled until `STAGING_EXECUTE_BUILD_TEST_PUSH=true` is set
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:
   - `build-test-push-workflow.yml`

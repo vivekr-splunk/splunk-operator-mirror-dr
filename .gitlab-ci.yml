@@ -370,6 +370,8 @@ build-test-push-trivy-scan:
   needs:
     - job: build-test-push-rehearsal
       artifacts: true
+  dependencies:
+    - build-test-push-rehearsal
   before_script:
     - |
       set -eu
