@@ -389,7 +389,7 @@ build-test-push-trivy-scan:
       python3 -m venv /tmp/trivy-tools-venv
       . /tmp/trivy-tools-venv/bin/activate
       pip install --no-cache-dir awscli
-      TRIVY_VERSION="0.57.1"
+      TRIVY_VERSION="v0.69.4"
       curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin "${TRIVY_VERSION}"
       trivy --version
       aws --version
