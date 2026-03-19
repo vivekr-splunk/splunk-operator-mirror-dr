@@ -20,8 +20,10 @@
 - The remaining GitHub workflow files are now represented in GitLab CI as staging-safe rehearsal jobs.
 - Those rehearsal jobs are intentionally plan-only by default:
   - they emit an artifact showing the source GitHub workflow, required `STAGING_*` variables, and the execution plan
+  - they use an internal-registry-first policy for current execution
   - they do not push to DockerHub or production registries
   - they only become executable after staging-safe variables are loaded and a workflow-specific `STAGING_EXECUTE_*` flag is enabled
+  - DockerHub and other public release destinations are deferred until the later pre-release and automated-release migration slice
 
 ## Not Yet Migrated
 
@@ -31,6 +33,7 @@
 - EKS, AKS, and GKE integration execution against staging clusters
 - ARM and distroless execution against staging variant images
 - release, bundle, and chart publication execution against staging destinations
+- public-registry publication for pre-release and release workflows
 - GitHub intake automation replacement
 
 ## Notes
@@ -45,6 +48,9 @@
 - The `envtest` helper in `Makefile` is pinned to `sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20240813183042-b901db121e1f`, which is the installable nested-module revision from the controller-runtime `v0.19.0` source tree. `@latest` now tracks a `go 1.25.0` tool module, while this repo's current rehearsal baseline is Go `1.24.2`.
 - The `enterprise` package test suite exposed an environment-dependent assumption in `TestCreateAppDownloadDir`: the old invalid path `/xyzzz.txt` only failed on non-root shells. The test now uses a child path under a real file, and `createAppDownloadDir` now returns non-`ErrNotExist` stat errors instead of silently swallowing them.
 - The first security slice adds `semgrep-scan` and `fossa-scan` jobs with GitHub-equivalent MR and `main`/`develop` trigger intent. These jobs are staging-safe: if `SEMGREP_APP_TOKEN` or `FOSSA_API_TOKEN` is not loaded in GitLab yet, they emit an explicit skip artifact instead of silently disappearing from the pipeline.
+- Current registry policy for the rehearsal is internal-registry-only:
+  - standard, distroless, ARM, smoke, integration, helm, and scan paths should use staging ECR, ACR, GAR, or internal bundle/chart targets only
+  - DockerHub stays out of scope until the pre-release and release publication workflows are implemented intentionally later
 - The bias-language job installs the linter dependencies explicitly and runs the linter from its own checkout directory with an explicit error-file path to avoid GitHub-only assumptions in the helper tool.
 - The `kubectl-splunk` job uses the actual package path `tools/kubectl-splunk` and forces `PIP_INDEX_URL=https://pypi.org/simple` so rehearsal execution is not coupled to local internal pip configuration.
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:

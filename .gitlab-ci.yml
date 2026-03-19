@@ -79,7 +79,8 @@ default:
         echo "required_vars=${REQUIRED_VARS:-none}"
         echo "missing_vars=${missing_vars:-none}"
         echo "notes=${WORKFLOW_NOTES:-none}"
-        echo "production_guard=This rehearsal job must not push to DockerHub or any production registry. Only STAGING_* destinations are allowed when execution is enabled."
+        echo "registry_policy=Internal registry only for current rehearsal execution. DockerHub and other public-release destinations stay disabled until the pre-release and release workstreams are explicitly implemented later."
+        echo "production_guard=This rehearsal job must not push to DockerHub or any production registry. Only STAGING_* internal destinations are allowed when execution is enabled."
       } | tee "${status_file}"
 
       if [ "${execute_value}" != "true" ]; then
@@ -605,12 +606,12 @@ automated-release-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/automated-release-workflow.yml
     WORKFLOW_CLASS: release-publication
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_AUTOMATED_RELEASE
-    REQUIRED_VARS: STAGING_PUBLIC_ECR_REPOSITORY,STAGING_COSIGN_PRIVATE_KEY,STAGING_COSIGN_PUBLIC_KEY,STAGING_COSIGN_PASSWORD,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET
-    WORKFLOW_NOTES: The GitHub workflow publishes RC and release images. The GitLab rehearsal must use only staging public-repository stand-ins and must not touch production DockerHub or public ECR names.
+    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_COSIGN_PRIVATE_KEY,STAGING_COSIGN_PUBLIC_KEY,STAGING_COSIGN_PASSWORD,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET
+    WORKFLOW_NOTES: The GitHub workflow publishes RC and release images. Until the later pre-release and release migration is implemented, GitLab rehearsal execution must stay on internal staging release registries only and must not touch DockerHub or public ECR names.
     WORKFLOW_PLAN: |
-      1. Build RC and final release images only in staging release registries.
+      1. Build RC and final release images only in internal staging release registries.
       2. Generate release artifacts against staging release targets.
-      3. Keep DockerHub publication disabled during rehearsal.
+      3. Keep DockerHub and public-registry publication disabled until the dedicated release-phase rehearsal.
 
 bundle-push-post-release-rehearsal:
   extends: .workflow-rehearsal-template
