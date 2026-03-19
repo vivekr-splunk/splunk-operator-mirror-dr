@@ -10,7 +10,9 @@
   - `develop` branch pipelines
   - formatting
   - vet
+  - bias language scan
   - unit tests
+  - `kubectl-splunk` Python tests
   - JUnit test report publication
   - coverage artifact publication
 
@@ -32,4 +34,7 @@
 - The bootstrap CI file is aligned to `go.mod` rather than the stale `.env` value, so it uses Go `1.24.2`.
 - The bootstrap verify job follows the current GitHub workflow behavior by running `make fmt` without a post-format diff gate.
 - The bootstrap pipeline now uses job-specific module flags: `format-and-vet` keeps writable module resolution, while `unit-tests` disables workspace mode and clears `GOFLAGS` before `make test`.
+- Go caches now live outside the repository tree so `controller-gen` does not scan downloaded modules under `paths="./..."`.
+- The bias-language job installs the linter dependencies explicitly and runs the linter from its own checkout directory with an explicit error-file path to avoid GitHub-only assumptions in the helper tool.
+- The `kubectl-splunk` job uses the actual package path `tools/kubectl-splunk` and forces `PIP_INDEX_URL=https://pypi.org/simple` so rehearsal execution is not coupled to local internal pip configuration.
 - Additional workflow classes should be migrated incrementally and validated in staging before production cutover.

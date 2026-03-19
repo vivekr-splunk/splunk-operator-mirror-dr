@@ -8,8 +8,8 @@ stages:
 
 variables:
   GIT_DEPTH: "0"
-  GOCACHE: "$CI_PROJECT_DIR/.cache/go/build"
-  GOMODCACHE: "$CI_PROJECT_DIR/.cache/go/pkg/mod"
+  GOCACHE: "/tmp/go-build"
+  GOMODCACHE: "/go/pkg/mod"
   GOWORK: "off"
 
 default:
@@ -22,8 +22,6 @@ default:
   cache:
     key: "go-${CI_COMMIT_REF_SLUG}"
     paths:
-      - .cache/go/build
-      - .cache/go/pkg/mod
       - bin/
 
 format-and-vet:
@@ -33,6 +31,33 @@ format-and-vet:
   script:
     - make fmt
     - make vet
+
+bias-language:
+  stage: verify
+  image: python:3.11-bookworm
+  variables:
+    PIP_INDEX_URL: "https://pypi.org/simple"
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ripgrep
+    - python --version
+  script:
+    - git clone https://github.com/splunk/biased-lang-linter.git .biaslanguage
+    - python -m venv /tmp/bias-language-venv
+    - . /tmp/bias-language-venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r .biaslanguage/requirements.txt
+    - cd .biaslanguage
+    - python run_json.py --path="$CI_PROJECT_DIR" --err_file=err_biased_lang.log
+  artifacts:
+    when: always
+    paths:
+      - .biaslanguage/biased-language-summary.json
+      - .biaslanguage/biased-language.codeclimate.json
+      - .biaslanguage/biased_language.log
+      - .biaslanguage/err_biased_lang.log
+    reports:
+      codequality: .biaslanguage/biased-language.codeclimate.json
 
 unit-tests:
   stage: test
@@ -54,3 +79,31 @@ unit-tests:
     reports:
       junit: unit_test.xml
   coverage: '/^total:\s+\(statements\)\s+(\d+\.\d+)%$/'
+
+kubectl-splunk-tests:
+  stage: test
+  image: python:3.11-bookworm
+  variables:
+    PIP_INDEX_URL: "https://pypi.org/simple"
+  before_script:
+    - python --version
+  script:
+    - python -m venv /tmp/kubectl-splunk-venv
+    - . /tmp/kubectl-splunk-venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r tools/kubectl-splunk/requirements.txt
+    - pip install -e tools/kubectl-splunk
+    - pip install coverage pytest
+    - cd tools/kubectl-splunk
+    - coverage run -m unittest discover -s tests
+    - coverage report | tee "$CI_PROJECT_DIR/kubectl-splunk-coverage-summary.txt"
+    - coverage xml -o "$CI_PROJECT_DIR/kubectl-splunk-coverage.xml"
+  artifacts:
+    when: always
+    paths:
+      - kubectl-splunk-coverage-summary.txt
+      - kubectl-splunk-coverage.xml
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: kubectl-splunk-coverage.xml
