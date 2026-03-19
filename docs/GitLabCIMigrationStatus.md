@@ -24,11 +24,13 @@
   - they do not push to DockerHub or production registries
   - they only become executable after staging-safe variables are loaded and a workflow-specific `STAGING_EXECUTE_*` flag is enabled
   - DockerHub and other public release destinations are deferred until the later pre-release and automated-release migration slice
+  - the current active execution phase also defers cosign sign and verify from the standard and distroless build rehearsals until the dedicated release workflow slice
 
 ## Not Yet Migrated
 
 - concrete runtime implementation for the workflow-level rehearsal scaffolds
-- staging registry publication and signing execution
+- staging registry publication execution
+- cosign signing execution for release-focused workflows
 - Trivy image-scan execution against staging images
 - EKS, AKS, and GKE integration execution against staging clusters
 - ARM and distroless execution against staging variant images
@@ -54,6 +56,17 @@
 - The bias-language job installs the linter dependencies explicitly and runs the linter from its own checkout directory with an explicit error-file path to avoid GitHub-only assumptions in the helper tool.
 - The `kubectl-splunk` job uses the actual package path `tools/kubectl-splunk` and forces `PIP_INDEX_URL=https://pypi.org/simple` so rehearsal execution is not coupled to local internal pip configuration.
 - The workflow-rehearsal scaffold template now clears inherited `before_script` and artifact `dependencies` so its `alpine` jobs do not try to run the repository-wide `apt-get` bootstrap intended for the Go-based jobs.
+- The rehearsal project now carries a first set of copied `STAGING_*` variables sourced from the internal GitLab CI project `splunk-operator/splunk-operator-cicd`:
+  - `STAGING_ECR_REPOSITORY`
+  - `STAGING_AWS_ACCESS_KEY_ID`
+  - `STAGING_AWS_SECRET_ACCESS_KEY`
+  - `STAGING_AWS_DEFAULT_REGION`
+  - `STAGING_TEST_BUCKET`
+  - `STAGING_TEST_INDEXES_S3_BUCKET`
+  - `STAGING_EKS_VPC_PUBLIC_SUBNET_STRING`
+  - `STAGING_EKS_VPC_PRIVATE_SUBNET_STRING`
+  - `STAGING_TEST_VPC_ENDPOINT_URL`
+- Cosign variables were intentionally not copied into the rehearsal project. The current decision is to defer signing until the later release-workflow migration slice rather than reuse production signing material.
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:
   - `build-test-push-workflow.yml`
   - `distroless-build-test-push-workflow.yml`

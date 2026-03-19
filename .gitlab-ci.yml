@@ -267,13 +267,13 @@ build-test-push-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/build-test-push-workflow.yml
     WORKFLOW_CLASS: build
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_BUILD_TEST_PUSH
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_COSIGN_PRIVATE_KEY,STAGING_COSIGN_PUBLIC_KEY,STAGING_COSIGN_PASSWORD
-    WORKFLOW_NOTES: Base verify and test coverage is already live in GitLab CI. This rehearsal job tracks the remaining image build, signing, Trivy scan, and smoke-test path.
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
+    WORKFLOW_NOTES: Base verify and test coverage is already live in GitLab CI. This rehearsal job now tracks the remaining image build, Trivy scan, and smoke-test path. Cosign signing is explicitly deferred to a later release-focused migration slice.
     WORKFLOW_PLAN: |
       1. Build the operator image only against a STAGING_ECR_REPOSITORY target.
-      2. Sign and verify only the staging image with STAGING_COSIGN_* material.
-      3. Run the Trivy image scan and publish the SARIF-equivalent artifact in GitLab.
-      4. Run EKS smoke tests only against staging subnets, buckets, and clusters.
+      2. Run the Trivy image scan and publish the SARIF-equivalent artifact in GitLab.
+      3. Run EKS smoke tests only against staging subnets, buckets, and clusters.
+      4. Record cosign sign and verify as deferred until the dedicated release workflow migration slice.
 
 distroless-build-test-push-rehearsal:
   extends: .workflow-rehearsal-template
@@ -288,12 +288,12 @@ distroless-build-test-push-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/distroless-build-test-push-workflow.yml
     WORKFLOW_CLASS: build-variant
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_DISTROLESS_BUILD
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_COSIGN_PRIVATE_KEY,STAGING_COSIGN_PUBLIC_KEY,STAGING_COSIGN_PASSWORD
-    WORKFLOW_NOTES: This job tracks the distroless image, signing, and smoke-test path. Production DockerHub publication remains explicitly out of scope for this rehearsal.
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
+    WORKFLOW_NOTES: This job tracks the distroless image and smoke-test path. Cosign signing remains deferred, and production DockerHub publication remains explicitly out of scope for this rehearsal.
     WORKFLOW_PLAN: |
       1. Build the distroless operator image to a staging registry only.
-      2. Sign and verify the distroless staging image.
-      3. Rehearse the distroless smoke-test path against staging EKS resources.
+      2. Rehearse the distroless smoke-test path against staging EKS resources.
+      3. Record cosign sign and verify as deferred until the dedicated release workflow migration slice.
 
 int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
