@@ -5,6 +5,7 @@ workflow:
 stages:
   - verify
   - test
+  - security
 
 variables:
   GIT_DEPTH: "0"
@@ -110,3 +111,66 @@ kubectl-splunk-tests:
       coverage_report:
         coverage_format: cobertura
         path: kubectl-splunk-coverage.xml
+
+semgrep-scan:
+  stage: security
+  image: returntocorp/semgrep
+  before_script: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+  script:
+    - |
+      if [ -z "${SEMGREP_APP_TOKEN:-}" ]; then
+        echo "SEMGREP_APP_TOKEN not set; skipping authenticated semgrep ci run" | tee semgrep-mode.txt
+        printf '[]\n' > semgrep-results.json
+        exit 0
+      fi
+      echo "Running semgrep ci with GitLab-managed token" | tee semgrep-mode.txt
+      semgrep ci --json --output semgrep-results.json
+  artifacts:
+    when: always
+    paths:
+      - semgrep-mode.txt
+      - semgrep-results.json
+
+fossa-scan:
+  stage: security
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+  script:
+    - |
+      if [ -z "${FOSSA_API_TOKEN:-}" ]; then
+        echo "FOSSA_API_TOKEN not set; skipping FOSSA scan" | tee fossa-mode.txt
+        : > fossa-scan.log
+        exit 0
+      fi
+    - |
+      if [ -n "${FOSSA_CLI_VERSION:-}" ]; then
+        curl -fsSL https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash -s -- -b /usr/local/bin "${FOSSA_CLI_VERSION}"
+      else
+        curl -fsSL https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash -s -- -b /usr/local/bin
+      fi
+    - fossa --version
+    - echo "Running FOSSA analyze/test with GitLab-managed token" | tee fossa-mode.txt
+    - export FOSSA_API_KEY="${FOSSA_API_TOKEN}"
+    - |
+      if [ -n "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" ]; then
+        {
+          fossa analyze --project "${CI_PROJECT_PATH}" --branch "${CI_COMMIT_REF_NAME}"
+          fossa test --diff "${CI_MERGE_REQUEST_DIFF_BASE_SHA}"
+        } 2>&1 | tee fossa-scan.log
+      else
+        {
+          fossa analyze --project "${CI_PROJECT_PATH}" --branch "${CI_COMMIT_REF_NAME}"
+          fossa test
+        } 2>&1 | tee fossa-scan.log
+      fi
+  artifacts:
+    when: always
+    paths:
+      - fossa-mode.txt
+      - fossa-scan.log
