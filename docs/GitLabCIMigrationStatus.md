@@ -30,4 +30,5 @@
 - This file tracks the live rehearsal state in GitLab.
 - The bootstrap CI file currently uses permissive `workflow:rules` so job execution can be proven before branch and MR gating is tightened.
 - The bootstrap CI file is aligned to `go.mod` rather than the stale `.env` value, so it uses Go `1.24.2`.
+- The bootstrap verify job follows the current GitHub workflow behavior by running `make fmt` without a post-format diff gate.
 - Additional workflow classes should be migrated incrementally and validated in staging before production cutover.

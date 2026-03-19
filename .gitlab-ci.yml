@@ -30,7 +30,6 @@ format-and-vet:
   stage: verify
   script:
     - make fmt
-    - git diff --exit-code
     - make vet
 
 unit-tests:
