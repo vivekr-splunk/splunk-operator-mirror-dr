@@ -174,6 +174,8 @@ format-and-vet:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
       when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+      when: never
     - when: on_success
   variables:
     GOFLAGS: "-mod=mod"
@@ -185,6 +187,8 @@ bias-language:
   stage: verify
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
+      when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
       when: never
     - when: on_success
   before_script:
@@ -228,6 +232,8 @@ unit-tests:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
       when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+      when: never
     - when: on_success
   needs:
     - format-and-vet
@@ -252,6 +258,8 @@ kubectl-splunk-tests:
   stage: test
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
+      when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
       when: never
     - when: on_success
   before_script:
@@ -296,6 +304,8 @@ kubectl-splunk-tests:
 semgrep-scan:
   stage: security
   rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -335,6 +345,8 @@ semgrep-scan:
 fossa-scan:
   stage: security
   rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -379,6 +391,7 @@ build-test-push-rehearsal:
   before_script: []
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -409,6 +422,7 @@ build-test-push-trivy-scan:
   before_script: []
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -449,7 +463,14 @@ distroless-build-test-push-rehearsal:
 int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  allow_failure: false
+  dependencies:
+    - build-test-push-rehearsal
+  needs:
+    - job: build-test-push-rehearsal
+      artifacts: true
   rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -459,13 +480,21 @@ int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/int-test-workflow.yml
     WORKFLOW_CLASS: integration-eks
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_EKS_INTEGRATION
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: This job tracks the full EKS integration matrix against non-production AWS targets only.
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: This job now executes the first real staging-only EKS integration runtime. It reuses the standard build artifact, mirrors the Splunk Enterprise image into staging ECR, provisions an ephemeral EKS cluster, runs one integration focus selected by STAGING_INT_TEST_FOCUS, and always performs cleanup.
     WORKFLOW_PLAN: |
-      1. Build the operator image into the staging ECR repository.
-      2. Mirror the enterprise image into staging ECR only.
-      3. Create an ephemeral staging EKS cluster and run the integration matrix.
-      4. Collect logs, run cleanup, and tear the cluster down.
+      1. Reuse the operator image already built into staging ECR by the standard build rehearsal.
+      2. Mirror the configured Splunk Enterprise image into staging ECR only.
+      3. Create an ephemeral staging EKS cluster and run the selected integration focus.
+      4. Collect JUnit and pod-log artifacts, run cleanup, and tear the cluster down.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/int-test-workflow-inttest-junit.xml
 
 namespace-scope-int-workflow-rehearsal:
   extends: .workflow-rehearsal-template
