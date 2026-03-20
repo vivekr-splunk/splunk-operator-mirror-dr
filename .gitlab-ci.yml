@@ -1,4 +1,6 @@
 workflow:
+  auto_cancel:
+    on_new_commit: conservative
   rules:
     - when: always
 
@@ -464,6 +466,7 @@ int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
   allow_failure: false
+  interruptible: false
   dependencies:
     - build-test-push-rehearsal
   needs:
@@ -499,6 +502,7 @@ int-test-workflow-rehearsal:
 namespace-scope-int-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -519,6 +523,7 @@ namespace-scope-int-workflow-rehearsal:
 manual-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -540,6 +545,7 @@ manual-int-test-workflow-rehearsal:
 nightly-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -560,6 +566,7 @@ nightly-int-test-workflow-rehearsal:
 int-test-azure-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -581,6 +588,7 @@ int-test-azure-workflow-rehearsal:
 int-test-gcp-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -602,6 +610,7 @@ int-test-gcp-workflow-rehearsal:
 distroless-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -622,6 +631,7 @@ distroless-int-test-workflow-rehearsal:
 helm-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -663,6 +673,7 @@ arm-ubuntu-build-test-push-rehearsal:
 arm-ubuntu-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -701,6 +712,7 @@ arm-rhel-build-test-push-rehearsal:
 arm-rhel-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -739,6 +751,7 @@ arm-al2023-build-test-push-rehearsal:
 arm-al2023-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -758,6 +771,7 @@ arm-al2023-int-test-workflow-rehearsal:
 pre-release-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: release
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -778,6 +792,7 @@ pre-release-workflow-rehearsal:
 automated-release-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: release
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -798,6 +813,7 @@ automated-release-workflow-rehearsal:
 bundle-push-post-release-rehearsal:
   extends: .workflow-rehearsal-template
   stage: release
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -818,6 +834,7 @@ bundle-push-post-release-rehearsal:
 release-charts-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: release
+  interruptible: false
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -838,6 +855,7 @@ release-charts-workflow-rehearsal:
 merge-develop-to-main-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: administration
+  interruptible: false
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'

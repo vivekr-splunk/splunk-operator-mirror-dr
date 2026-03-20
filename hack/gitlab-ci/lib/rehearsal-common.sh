@@ -113,3 +113,16 @@ sanitize_slug() {
     | tr '[:upper:]' '[:lower:]' \
     | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//'
 }
+
+normalize_testenv_commit_hash() {
+  commit_hash="$1"
+  max_length="${2:-8}"
+  sanitized_hash="$(printf '%s' "${commit_hash}" | tr -cd '[:alnum:]')"
+
+  if [ -z "${sanitized_hash}" ]; then
+    NORMALIZED_TESTENV_COMMIT_HASH=""
+    return 0
+  fi
+
+  NORMALIZED_TESTENV_COMMIT_HASH="$(printf '%s' "${sanitized_hash}" | cut -c1-"${max_length}")"
+}
