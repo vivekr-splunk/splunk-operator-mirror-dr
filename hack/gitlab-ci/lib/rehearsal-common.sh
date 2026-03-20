@@ -95,6 +95,39 @@ install_eksctl_version() {
   fi
 }
 
+install_helm_version() {
+  helm_version="$1"
+  ci_bin_dir="$2"
+  temp_archive="/tmp/helm-${helm_version}-linux-amd64.tar.gz"
+
+  ensure_ci_bin_path "$ci_bin_dir"
+
+  if [ ! -x "${ci_bin_dir}/helm" ]; then
+    curl -fsSL -o "${temp_archive}" "https://get.helm.sh/helm-${helm_version}-linux-amd64.tar.gz"
+    tar -xzf "${temp_archive}" -C /tmp linux-amd64/helm
+    mv /tmp/linux-amd64/helm "${ci_bin_dir}/helm"
+    chmod +x "${ci_bin_dir}/helm"
+    rm -f "${temp_archive}"
+    rm -rf /tmp/linux-amd64
+  fi
+}
+
+install_kuttl_version() {
+  kuttl_version="$1"
+  ci_bin_dir="$2"
+  temp_archive="/tmp/kuttl_${kuttl_version#v}_linux_x86_64.tar.gz"
+
+  ensure_ci_bin_path "$ci_bin_dir"
+
+  if [ ! -x "${ci_bin_dir}/kubectl-kuttl" ]; then
+    curl -fsSL -o "${temp_archive}" "https://github.com/kudobuilder/kuttl/releases/download/${kuttl_version}/kuttl_${kuttl_version#v}_linux_x86_64.tar.gz"
+    tar -xzf "${temp_archive}" -C /tmp kubectl-kuttl
+    mv /tmp/kubectl-kuttl "${ci_bin_dir}/kubectl-kuttl"
+    chmod +x "${ci_bin_dir}/kubectl-kuttl"
+    rm -f "${temp_archive}"
+  fi
+}
+
 copy_if_exists() {
   src="$1"
   dest="$2"

@@ -178,6 +178,8 @@ format-and-vet:
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
       when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
+      when: never
     - when: on_success
   variables:
     GOFLAGS: "-mod=mod"
@@ -191,6 +193,8 @@ bias-language:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+      when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
       when: never
     - when: on_success
   before_script:
@@ -236,6 +240,8 @@ unit-tests:
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
       when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
+      when: never
     - when: on_success
   needs:
     - format-and-vet
@@ -262,6 +268,8 @@ kubectl-splunk-tests:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+      when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
       when: never
     - when: on_success
   before_script:
@@ -308,6 +316,8 @@ semgrep-scan:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
       when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -348,6 +358,8 @@ fossa-scan:
   stage: security
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+      when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -394,6 +406,7 @@ build-test-push-rehearsal:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -631,8 +644,15 @@ distroless-int-test-workflow-rehearsal:
 helm-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
+  allow_failure: false
   interruptible: false
+  dependencies:
+    - build-test-push-rehearsal
+  needs:
+    - job: build-test-push-rehearsal
+      artifacts: true
   rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -643,13 +663,14 @@ helm-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/helm-test-workflow.yml
     WORKFLOW_CLASS: integration-helm
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_HELM_TEST
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_TEST_VPC_ENDPOINT_URL
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_TEST_VPC_ENDPOINT_URL,STAGING_SPLUNK_ENTERPRISE_IMAGE
     WORKFLOW_NOTES: This workflow combines image build, EKS setup, helm packaging, and kuttl-based helm validation. It must remain fully staging-only.
     WORKFLOW_PLAN: |
       1. Build the operator image into staging ECR.
       2. Package the helm chart locally in the pipeline.
       3. Run kuttl-based helm validation against a disposable staging EKS cluster.
       4. Do not call the public GitHub Pages helm repository during rehearsal except for read-only validation.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/helm-test-workflow-rehearsal.sh
 
 arm-ubuntu-build-test-push-rehearsal:
   extends: .workflow-rehearsal-template
