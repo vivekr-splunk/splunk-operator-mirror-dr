@@ -9,6 +9,12 @@ This document answers a narrower question than the migration runbook:
 - Is the current GitLab CI design already production-grade?
 - What must change so the final GitLab workflow model minimizes human intervention?
 
+Use the companion diagram set in:
+
+- `docs/GitLabCIArchitectureDiagrams.md`
+
+when you want the visual runtime flow and component partitioning instead of the written assessment.
+
 ## Direct Answer
 
 Not yet fully.

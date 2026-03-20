@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+# Runtime contract
+# - Purpose: package the Helm chart and run KUTTL-based Helm validation on an ephemeral staging EKS cluster.
+# - Inputs: build artifact image ref, staging AWS/EKS/S3 variables, Helm/KUTTL versions, and repo .env defaults.
+# - Outputs: runtime context, cluster logs, KUTTL logs, copied KUTTL artifacts, and JUnit XML under rehearsal/.
+# - Guardrails: staging-only cluster and registry usage, chart packaging performed inside the pipeline, cleanup on exit.
+
 . "${CI_PROJECT_DIR}/hack/gitlab-ci/lib/rehearsal-common.sh"
 
 context_file="rehearsal/${WORKFLOW_SLUG}-runtime-context.txt"

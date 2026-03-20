@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+# Runtime contract
+# - Purpose: execute the primary staging EKS integration path against the operator image built in GitLab.
+# - Inputs: build artifact image ref, staging AWS/EKS/S3 variables, focus selector, and repo .env defaults.
+# - Outputs: runtime context, cluster logs, cleanup log, copied pod logs, and JUnit output under rehearsal/.
+# - Guardrails: ephemeral cluster naming, staging-only registries and buckets, cleanup on success, failure, or signal.
+
 . "${CI_PROJECT_DIR}/hack/gitlab-ci/lib/rehearsal-common.sh"
 
 context_file="rehearsal/${WORKFLOW_SLUG}-runtime-context.txt"

@@ -11,6 +11,9 @@
     - which ones are intentionally merged into shared GitLab jobs
     - where duplication still exists
     - what the target production-grade GitLab automation model should be
+- A diagram set now exists in:
+  - `docs/GitLabCIArchitectureDiagrams.md`
+  - use that document to view the C4 runtime flow and component diagrams plus the generated PNG links
 - The GitLab CI structure has now been refactored into reusable workflow families instead of continuing to grow as one job per legacy GitHub workflow:
   - shared rule families for:
     - core CI

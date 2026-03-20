@@ -1,0 +1,54 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Splunk Operator GitLab CI Component Architecture
+LAYOUT_LEFT_RIGHT()
+
+System_Ext(registries, "Internal Registries", "ECR / ACR / GAR / Artifactory")
+System_Ext(clusters, "Ephemeral Test Clusters", "EKS / AKS / GKE")
+System_Ext(github, "GitHub Intake / Mirror", "Public intake and mirrored refs only")
+System_Ext(release_targets, "Release Targets", "GitLab Releases, charts, bundles, mirrored public outputs")
+ContainerDb(vars, "GitLab CI Variables", "GitLab variables", "Protected, masked, and file-type runtime inputs")
+
+Container_Boundary(ci_boundary, "splunk-operator GitLab CI") {
+  Component(rule_families, "Rule Families", "Hidden GitLab CI templates", "Centralized MR, branch, schedule, web, and short-loop routing")
+  Component(rehearsal_template, "Workflow Rehearsal Template", "Hidden GitLab CI template", "Plan-only vs executable contract, artifact capture, and status reporting")
+  Component(build_family, "Build Family", "GitLab jobs", "Standard, distroless, and ARM build workflows")
+  Component(image_scan_family, "Image Scan Family", "GitLab jobs", "Trivy scan of the canonical staged image")
+  Component(core_ci_family, "Core CI Family", "GitLab jobs", "fmt, vet, bias-language, unit-tests, kubectl-splunk")
+  Component(security_family, "Security Family", "GitLab jobs", "Semgrep and FOSSA")
+  Component(integration_family, "Integration Families", "GitLab jobs", "EKS, nightly, namespace, Azure, GCP, distroless, and Helm paths")
+  Component(release_family, "Release Family", "GitLab jobs", "Pre-release, release, charts, bundles")
+  Component(admin_family, "Administration Family", "GitLab jobs", "Promote-to-main and intake-related governance")
+  Component(runtime_scripts, "Runtime Scripts", "hack/gitlab-ci/*.sh", "Checked-in execution logic for build, Trivy, EKS, and Helm")
+  Component(shared_shell, "Shared Shell Library", "hack/gitlab-ci/lib/rehearsal-common.sh", "Registry resolution, tool installs, artifact checks, naming, and context helpers")
+}
+
+Rel(rule_families, core_ci_family, "controls job selection")
+Rel(rule_families, security_family, "controls job selection")
+Rel(rule_families, build_family, "controls job selection")
+Rel(rule_families, integration_family, "controls job selection")
+Rel(rule_families, release_family, "controls job selection")
+Rel(rule_families, admin_family, "controls job selection")
+
+Rel(rehearsal_template, build_family, "provides workflow contract")
+Rel(rehearsal_template, integration_family, "provides workflow contract")
+Rel(rehearsal_template, release_family, "provides workflow contract")
+Rel(rehearsal_template, admin_family, "provides workflow contract")
+Rel(rehearsal_template, vars, "checks required variables and execution flags")
+
+Rel(build_family, runtime_scripts, "invokes executable build runtime")
+Rel(image_scan_family, runtime_scripts, "invokes executable image-scan runtime")
+Rel(integration_family, runtime_scripts, "invokes executable cluster runtimes")
+Rel(runtime_scripts, shared_shell, "uses shared helpers")
+Rel(runtime_scripts, vars, "reads staging and later production credentials")
+
+Rel(build_family, registries, "publishes staged operator images")
+Rel(image_scan_family, registries, "reads staged images for scanning")
+Rel(integration_family, clusters, "creates ephemeral runtime environments")
+Rel(integration_family, registries, "pulls staged operator and enterprise images")
+Rel(release_family, release_targets, "publishes release artifacts and metadata")
+Rel(admin_family, github, "coordinates mirror and public intake governance")
+
+SHOW_LEGEND()
+@enduml

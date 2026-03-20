@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# Shared GitLab rehearsal helpers
+# - Keep these functions POSIX-shell compatible because the workflow template invokes them with /bin/sh.
+# - Centralize registry resolution, tool bootstrapping, artifact checks, naming normalization, and context capture.
+# - Runtime scripts should prefer these helpers instead of duplicating parsing or bootstrap logic.
+
 append_context() {
   context_file="$1"
   key="$2"

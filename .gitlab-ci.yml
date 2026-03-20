@@ -1,3 +1,9 @@
+# GitLab CI architecture notes
+# - This file is the authoritative GitLab CI entrypoint for the migration rehearsal.
+# - Core CI, security, build, integration, release, and administration jobs are grouped into reusable workflow families.
+# - Runtime jobs must stay staging-safe until the production cutover plan explicitly enables release/public destinations.
+# - The hidden rehearsal template provides a uniform plan-only vs executable contract plus artifact-based observability.
+
 workflow:
   auto_cancel:
     on_new_commit: conservative
@@ -49,6 +55,9 @@ default:
     paths:
       - bin/
 
+# Shared rehearsal contract
+# Every workflow-shaped job extends this template so migration tracking, required-variable checks,
+# execution mode, and emitted artifacts stay consistent even while individual runtimes evolve.
 .workflow-rehearsal-template:
   image: $INTERNAL_CI_IMAGE
   allow_failure: true
@@ -171,6 +180,8 @@ default:
       - rehearsal/${WORKFLOW_SLUG}-trivy-results.sarif
       - rehearsal/${WORKFLOW_SLUG}-trivy-results.txt
 
+# Reusable workflow families
+# These hidden jobs centralize stage ownership, timeout policy, interruptibility, and build-artifact reuse.
 .required-rehearsal:
   allow_failure: false
 
@@ -205,6 +216,9 @@ default:
     - job: build-test-push-rehearsal
       artifacts: true
 
+# Shared trigger rules
+# The migration keeps trigger logic centralized so MR, branch, schedule, web, and short-loop debug modes
+# do not drift across workflow families.
 .rules-core-standard:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
@@ -285,6 +299,8 @@ default:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
+# Baseline CI family
+# These jobs are already proven live and form the required gate before build or release work can proceed.
 format-and-vet:
   stage: verify
   extends: .rules-core-standard
@@ -470,6 +486,8 @@ fossa-scan:
       - fossa-mode.txt
       - fossa-scan.log
 
+# Image assurance family
+# Standard build is the canonical upstream artifact for image scans and the first runtime families.
 build-test-push-rehearsal:
   extends:
     - .workflow-rehearsal-template
@@ -536,6 +554,10 @@ distroless-build-test-push-rehearsal:
       2. Rehearse the distroless smoke-test path against staging EKS resources.
       3. Record cosign sign and verify as deferred until the dedicated release workflow migration slice.
 
+# Runtime validation family
+# EKS, Helm, cross-cloud, namespace, nightly, and variant paths live here. The production target is a
+# smaller number of parameterized runtime modules, but these jobs preserve source-workflow traceability
+# during the migration program.
 int-test-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
@@ -705,6 +727,8 @@ helm-test-workflow-rehearsal:
     reports:
       junit: rehearsal/helm-test-workflow-kuttl-junit.xml
 
+# ARM and distro variants remain explicit during rehearsal so platform-specific credentials, timeouts,
+# and later partitioning can be validated before they are collapsed into fewer parameterized modules.
 arm-ubuntu-build-test-push-rehearsal:
   extends:
     - .workflow-rehearsal-template
@@ -807,6 +831,8 @@ arm-al2023-int-test-workflow-rehearsal:
       1. Build the ARM AL2023 operator image into staging ECR.
       2. Run the ARM AL2023 integration path against staging EKS resources.
 
+# Release and administration family
+# These jobs remain staging-safe and mostly rehearsal-first until the release-train implementation is complete.
 pre-release-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template

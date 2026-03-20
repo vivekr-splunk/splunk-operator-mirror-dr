@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+# Runtime contract
+# - Purpose: scan the staged operator image emitted by build-test-push-rehearsal.
+# - Inputs: build artifact containing the image ref plus staging AWS credentials.
+# - Outputs: SARIF and human-readable Trivy reports under rehearsal/.
+# - Guardrails: read-only access to staging ECR, severity limited to CRITICAL for the current migration slice.
+
 . "${CI_PROJECT_DIR}/hack/gitlab-ci/lib/rehearsal-common.sh"
 
 export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"

@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+# Runtime contract
+# - Purpose: build the canonical staging operator image that downstream scan and runtime jobs consume.
+# - Inputs: STAGING_ECR_REPOSITORY plus staging AWS credentials and region resolution.
+# - Outputs: image reference and digest artifacts under rehearsal/.
+# - Guardrails: staging-only ECR publication, commit-scoped tag only, no latest/public registry mutation.
+
 . "${CI_PROJECT_DIR}/hack/gitlab-ci/lib/rehearsal-common.sh"
 
 export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"

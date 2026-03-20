@@ -1,0 +1,29 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Dynamic.puml
+
+title Splunk Operator GitLab CI Runtime Flow
+LAYOUT_WITH_LEGEND()
+
+Person(dev, "Developer / Release Engineer", "Creates branches, merge requests, and release actions")
+System_Ext(github, "GitHub", "Public mirror and intake after cutover")
+System_Ext(registries, "Internal Registries", "ECR / ACR / GAR / Artifactory")
+System_Ext(clusters, "Ephemeral Test Clusters", "EKS / AKS / GKE")
+System_Ext(release_targets, "Release Targets", "GitLab Releases and later mirrored public targets")
+
+System_Boundary(gitlab_boundary, "GitLab Authoritative SDLC") {
+  Container(repo, "splunk-operator GitLab Repo", "GitLab project", "Authoritative source, MRs, schedules, and release control")
+  Container(ci, "GitLab CI Pipeline", "GitLab CI", "Core CI, build, scan, integration, Helm, and release families")
+  ContainerDb(vars, "GitLab CI Variables", "Protected and file variables", "STAGING_* and later production secrets")
+}
+
+Rel(dev, repo, "1. Pushes a branch, opens an MR, or starts a manual release action")
+Rel(repo, ci, "2. GitLab creates a push, MR, schedule, or web pipeline")
+Rel(ci, vars, "3. Reads protected variables and runtime flags")
+Rel(ci, registries, "4. Builds and pushes staging images")
+Rel(ci, registries, "5. Pulls staged images for Trivy and runtime validation")
+Rel(ci, clusters, "6. Provisions ephemeral clusters and runs smoke, integration, and Helm suites")
+Rel(ci, release_targets, "7. Publishes release artifacts in the release phase")
+Rel(repo, github, "8. Mirrors refs and accepts public intake", "Post-cutover only")
+
+SHOW_LEGEND()
+@enduml
