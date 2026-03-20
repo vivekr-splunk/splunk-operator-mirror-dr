@@ -481,7 +481,6 @@ int-test-workflow-rehearsal:
   allow_failure: false
   interruptible: false
   timeout: 4h
-  resource_group: staging-eks-runtime
   dependencies:
     - build-test-push-rehearsal
   needs:
@@ -649,7 +648,6 @@ helm-test-workflow-rehearsal:
   allow_failure: false
   interruptible: false
   timeout: 3h
-  resource_group: staging-eks-runtime
   dependencies:
     - build-test-push-rehearsal
   needs:
