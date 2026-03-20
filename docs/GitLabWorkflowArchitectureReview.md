@@ -195,6 +195,11 @@ Production GitLab CI should be organized around execution families, not around h
 
 The recent reusable-family refactor reduces this problem, but it does not eliminate it yet.
 
+A practical improvement has now landed on top of that refactor:
+
+- namespace-scope, manual, and nightly EKS workflows now reuse the checked-in EKS runtime script instead of remaining plan-only placeholders
+- chart release now has a dry-run packaging script instead of remaining documentation-only
+
 ### 2. Build / Smoke / Integration Are Not Yet Cleanly Separated Into Reusable Modules
 
 Right now:

@@ -594,6 +594,8 @@ namespace-scope-int-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-10h
+    - .required-rehearsal
+    - .needs-standard-build
     - .rules-schedule-or-mr-manual
   variables:
     WORKFLOW_SLUG: namespace-scope-int-workflow
@@ -601,17 +603,29 @@ namespace-scope-int-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/namespace-scope-int-workflow.yml
     WORKFLOW_CLASS: integration-eks-namespace-scope
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_NAMESPACE_SCOPE_INTEGRATION
+    JOB_INT_TEST_PROFILE: managersecret
+    JOB_INT_CLUSTER_WIDE: "false"
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This workflow is schedule-driven in GitHub. The GitLab rehearsal keeps it schedule-driven, with an MR manual hook for non-production validation.
     WORKFLOW_PLAN: |
       1. Run the namespace-scope integration matrix with CLUSTER_WIDE=false.
       2. Use staging EKS resources only.
       3. Preserve log collection and teardown in the same job flow.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/namespace-scope-int-workflow-inttest-junit.xml
 
 manual-int-test-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-10h
+    - .required-rehearsal
+    - .needs-standard-build
     - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: manual-int-test-workflow
@@ -619,6 +633,7 @@ manual-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/manual-int-test-workflow.yml
     WORKFLOW_CLASS: integration-eks-manual
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_MANUAL_INTEGRATION
+    JOB_INT_TEST_PROFILE: managersecret
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This workflow remains manually invoked in GitLab. The execution path must use staging-only inputs and must not publish operator images to DockerHub.
     WORKFLOW_PLAN: |
@@ -626,11 +641,21 @@ manual-int-test-workflow-rehearsal:
       2. Build and publish only to staging ECR.
       3. Run the integration suite against ephemeral staging EKS resources.
       4. Do not push the int tag to DockerHub during rehearsal or production cutover.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/manual-int-test-workflow-inttest-junit.xml
 
 nightly-int-test-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-10h
+    - .required-rehearsal
+    - .needs-standard-build
     - .rules-schedule-or-mr-manual
   variables:
     WORKFLOW_SLUG: nightly-int-test-workflow
@@ -638,12 +663,21 @@ nightly-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/nightly-int-test-workflow.yml
     WORKFLOW_CLASS: integration-eks-nightly
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_NIGHTLY_INTEGRATION
+    JOB_INT_TEST_PROFILE: full
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This job maps the scheduled nightly path. The legacy DockerHub edge publication is intentionally excluded from the staging rehearsal.
     WORKFLOW_PLAN: |
       1. Build the operator image in staging ECR from develop.
       2. Run the nightly EKS integration suite against ephemeral staging infrastructure.
       3. Replace DockerHub edge publication with a staging-only validation artifact during rehearsal.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/nightly-int-test-workflow-inttest-junit.xml
 
 int-test-azure-workflow-rehearsal:
   extends:
@@ -901,6 +935,7 @@ release-charts-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .release-family
+    - .required-rehearsal
     - .rules-main-or-mr-manual
   variables:
     WORKFLOW_SLUG: release-charts-workflow
@@ -908,12 +943,18 @@ release-charts-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/release.yml
     WORKFLOW_CLASS: release-charts
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_CHART_RELEASE
-    REQUIRED_VARS: STAGING_CHART_RELEASE_REPOSITORY,STAGING_CHART_RELEASE_TOKEN
+    REQUIRED_VARS: ""
     WORKFLOW_NOTES: GitHub chart-releaser output must be replaced with GitLab-driven chart publication to a staging mirror first. Public GitHub Pages must remain read-only until production cutover.
     WORKFLOW_PLAN: |
       1. Package charts in GitLab and publish them to a staging chart release destination.
       2. Validate the resulting index and asset layout before production cutover.
       3. Keep the public GitHub Pages helm repo unchanged during rehearsal.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/release-charts-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
 
 merge-develop-to-main-workflow-rehearsal:
   extends:

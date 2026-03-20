@@ -136,6 +136,18 @@
   - Helm KUTTL:
     - `STAGING_HELM_TEST_PROFILE=smoke|clustered|apps|full|custom`
   - this does not yet replace the final production partition design, but it provides a stable contract for smaller GitLab runtime slices instead of a single monolithic job shape
+- The runnable scenario set has expanded beyond the original four executable jobs:
+  - reusable EKS runtime now also backs:
+    - `namespace-scope-int-workflow-rehearsal`
+    - `manual-int-test-workflow-rehearsal`
+    - `nightly-int-test-workflow-rehearsal`
+  - chart release now has a staging-safe dry-run script in:
+    - `hack/gitlab-ci/release-charts-workflow-rehearsal.sh`
+  - current machine-generated readiness audit summary:
+    - runnable now:
+      - `8`
+    - design-only:
+      - `15`
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:
   - `build-test-push-workflow.yml`
   - `distroless-build-test-push-workflow.yml`
