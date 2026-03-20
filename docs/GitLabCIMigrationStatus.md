@@ -124,9 +124,17 @@
       - `205852802` `merge-develop-to-main-workflow-rehearsal`: `success`
 - Present in the modularized graph but not yet executed end to end:
   - Azure integration family
+    - concrete runtime script now exists
+    - currently blocked only on missing `STAGING_AZURE_*` variables in the group project
   - GCP integration family
+    - concrete runtime script now exists
+    - currently blocked only on missing `STAGING_GCP_*` variables in the group project
   - distroless integration family
+    - concrete build and integration runtime hooks now exist
+    - still needs first live proof run in the group project
   - ARM build and integration families
+    - concrete buildx and integration runtime hooks now exist for Ubuntu, RHEL, and AL2023
+    - still need first live proof runs in the group project
   - release promotion to official public destinations
 - Executed but still under stabilization:
   - namespace-scope/manual/nightly EKS variants
@@ -142,18 +150,20 @@ Interpretation:
 - Final production readiness still requires every authoritative family to move from "present" to "executed and validated."
 - Current machine-generated readiness summary for the group project:
   - runnable now:
-    - `12`
+    - `21`
+  - blocked on missing vars:
+    - `2`
   - design-only:
-    - `11`
+    - `0`
 
 ## Not Yet Migrated
 
-- concrete runtime implementation for the workflow-level rehearsal scaffolds
-- staging registry publication execution for the standard build slice
+- first live runtime proof for the distroless staging family
+- first live runtime proof for the ARM staging families
+- Azure staging variable load and first AKS runtime proof
+- GCP staging variable load and first GKE runtime proof
 - cosign signing execution for release-focused workflows
-- Trivy image-scan execution against staging images
-- EKS, AKS, and GKE integration execution against staging clusters
-- remaining runtime proof for the ARM and distroless staging variant slices
+- remaining runtime stabilization for the partitioned EKS variants
 - release, bundle, and chart publication execution against staging destinations
 - public-registry publication for pre-release and release workflows
 - GitHub intake automation replacement

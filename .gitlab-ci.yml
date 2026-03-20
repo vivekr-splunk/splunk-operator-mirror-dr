@@ -754,6 +754,7 @@ int-test-azure-workflow-rehearsal:
       2. Provision a disposable AKS cluster in the staging resource group.
       3. Run the Azure sanity integration path and collect logs.
       4. Delete the staging AKS cluster at the end of the run.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-azure-workflow-rehearsal.sh
 
 int-test-gcp-workflow-rehearsal:
   extends:
@@ -773,6 +774,7 @@ int-test-gcp-workflow-rehearsal:
       2. Provision a disposable GKE cluster in the staging project.
       3. Run the GCP integration matrix and collect logs.
       4. Delete the staging GKE cluster at the end of the run.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-gcp-workflow-rehearsal.sh
 
 distroless-int-test-workflow-rehearsal:
   extends:
@@ -1110,8 +1112,9 @@ cla-check-intake-note:
     SOURCE_WORKFLOW_FILE: .github/workflows/cla-check.yml
     WORKFLOW_CLASS: github-intake-only
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_CLA_CHECK
-    REQUIRED_VARS: STAGING_GITHUB_INTAKE_TOKEN
+    REQUIRED_VARS: ""
     WORKFLOW_NOTES: CLA and code-of-conduct checks remain on the GitHub intake surface after cutover. They are not part of the authoritative GitLab merge path.
     WORKFLOW_PLAN: |
       1. Keep CLA and CoC automation on the public GitHub intake repository.
       2. Ensure the GitHub intake workflow never becomes an authoritative merge gate after cutover.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/cla-check-intake-note.sh
