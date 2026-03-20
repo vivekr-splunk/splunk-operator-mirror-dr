@@ -296,6 +296,15 @@ default:
 
 .rules-main-develop-mr:
   rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "variant_runtime"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+.rules-variant-runtime-or-main-develop-mr:
+  rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "variant_runtime"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -317,6 +326,7 @@ default:
 
 .rules-web-or-mr-manual:
   rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "variant_runtime"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
@@ -586,7 +596,7 @@ distroless-build-test-push-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .build-family
-    - .rules-main-develop-mr
+    - .rules-variant-runtime-or-main-develop-mr
   variables:
     WORKFLOW_SLUG: distroless-build-test-push-workflow
     WORKFLOW_NAME: Build and Test Distroless
@@ -782,7 +792,7 @@ distroless-int-test-workflow-rehearsal:
     - .integration-family-10h
     - .required-rehearsal
     - .needs-distroless-build
-    - .rules-main-develop-mr
+    - .rules-variant-runtime-or-main-develop-mr
   variables:
     WORKFLOW_SLUG: distroless-int-test-workflow
     WORKFLOW_NAME: Integration Test Workflow Distroless
