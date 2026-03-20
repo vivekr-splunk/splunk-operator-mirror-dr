@@ -480,7 +480,7 @@ int-test-workflow-rehearsal:
   stage: integration
   allow_failure: false
   interruptible: false
-  timeout: 4h
+  timeout: 10h
   dependencies:
     - build-test-push-rehearsal
   needs:
@@ -517,6 +517,7 @@ namespace-scope-int-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
   interruptible: false
+  timeout: 10h
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -538,6 +539,7 @@ manual-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
   interruptible: false
+  timeout: 10h
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -560,6 +562,7 @@ nightly-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
   interruptible: false
+  timeout: 10h
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -581,6 +584,7 @@ int-test-azure-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
   interruptible: false
+  timeout: 10h
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -603,6 +607,7 @@ int-test-gcp-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
   interruptible: false
+  timeout: 10h
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -625,6 +630,7 @@ distroless-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
   interruptible: false
+  timeout: 10h
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -647,7 +653,7 @@ helm-test-workflow-rehearsal:
   stage: integration
   allow_failure: false
   interruptible: false
-  timeout: 3h
+  timeout: 10h
   dependencies:
     - build-test-push-rehearsal
   needs:
@@ -704,6 +710,7 @@ arm-ubuntu-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
   interruptible: false
+  timeout: 5h
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -743,6 +750,7 @@ arm-rhel-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
   interruptible: false
+  timeout: 5h
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -782,6 +790,7 @@ arm-al2023-int-test-workflow-rehearsal:
   extends: .workflow-rehearsal-template
   stage: integration
   interruptible: false
+  timeout: 5h
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
