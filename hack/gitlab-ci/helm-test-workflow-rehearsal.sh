@@ -49,6 +49,9 @@ if [ -z "${RESOLVED_ECR_REGION}" ]; then
 fi
 
 cluster_name_prefix="${STAGING_HELM_CLUSTER_NAME_PREFIX:-eks-helm-test-cluster}"
+requested_helm_profile="${STAGING_HELM_TEST_PROFILE:-smoke}"
+resolve_helm_test_profile "${requested_helm_profile}"
+generated_kuttl_config="rehearsal/${WORKFLOW_SLUG}-kuttl-suite.yaml"
 
 export AWS_DEFAULT_REGION="${RESOLVED_ECR_REGION}"
 export AWS_REGION="${RESOLVED_ECR_REGION}"
@@ -80,6 +83,10 @@ append_context "${context_file}" "input_artifact" "rehearsal/build-test-push-wor
 append_context "${context_file}" "operator_image" "${IMAGE_REF}"
 append_context "${context_file}" "cluster_name" "${TEST_CLUSTER_NAME}"
 append_context "${context_file}" "ecr_region_source" "${RESOLVED_ECR_REGION_SOURCE}"
+append_context "${context_file}" "helm_test_profile" "${RESOLVED_HELM_TEST_PROFILE}"
+append_context "${context_file}" "helm_test_dirs" "${RESOLVED_HELM_TEST_DIRS}"
+append_context "${context_file}" "helm_test_timeout" "${RESOLVED_HELM_TEST_TIMEOUT}"
+append_context "${context_file}" "helm_test_parallel" "${RESOLVED_HELM_TEST_PARALLEL}"
 append_context "${context_file}" "helm_version" "${HELM_VERSION}"
 append_context "${context_file}" "kuttl_version" "${KUTTL_VERSION}"
 append_context "${context_file}" "job_timeout" "${CI_JOB_TIMEOUT:-unknown}"
@@ -174,12 +181,15 @@ log_step "helm:package:complete"
 export KUTTL_SPLUNK_ENTERPRISE_IMAGE="${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 export KUTTL_SPLUNK_OPERATOR_IMAGE="${IMAGE_REF}"
 
+write_kuttl_testsuite_config "${generated_kuttl_config}" "${RESOLVED_HELM_TEST_DIRS}" "${RESOLVED_HELM_TEST_PARALLEL}" "${RESOLVED_HELM_TEST_TIMEOUT}" "kuttl-artifacts"
+
 append_context "${context_file}" "private_splunk_enterprise_image" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 append_context "${context_file}" "kuttl_operator_image" "${KUTTL_SPLUNK_OPERATOR_IMAGE}"
 append_context "${context_file}" "kuttl_enterprise_image" "${KUTTL_SPLUNK_ENTERPRISE_IMAGE}"
+append_context "${context_file}" "generated_kuttl_config" "${generated_kuttl_config}"
 
 log_step "tests:helm-kuttl:start"
-kubectl kuttl test --config "${CI_PROJECT_DIR}/kuttl/kuttl-test-helm.yaml" --report xml 2>&1 | tee -a "${kuttl_log}"
+kubectl kuttl test --config "${generated_kuttl_config}" --report xml 2>&1 | tee -a "${kuttl_log}"
 log_step "tests:helm-kuttl:complete"
 
 if [ -f "${CI_PROJECT_DIR}/kuttl-report.xml" ]; then

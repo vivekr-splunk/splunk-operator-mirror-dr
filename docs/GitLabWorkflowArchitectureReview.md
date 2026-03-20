@@ -15,6 +15,11 @@ Use the companion diagram set in:
 
 when you want the visual runtime flow and component partitioning instead of the written assessment.
 
+Use these companion design docs when you need the narrower family-level view:
+
+- `docs/GitLabRuntimeProfiles.md`
+- `docs/GitLabReleaseTrainArchitecture.md`
+
 ## Direct Answer
 
 Not yet fully.
@@ -206,6 +211,10 @@ The smoke path should become a reusable runtime module, not remain implied by th
 
 The release train is currently represented, but not yet implemented as a linked GitLab release flow.
 
+The desired release-phase orchestration is now documented separately in:
+
+- `docs/GitLabReleaseTrainArchitecture.md`
+
 Production target should be one orchestrated release pipeline with phases:
 
 - promote develop to release-ready state
@@ -249,6 +258,10 @@ Production-grade automation requires explicit partitioning strategy:
 - by schedule vs MR vs release context
 
 Without that, the GitLab design will be correct but operationally inefficient.
+
+The current interim partition model is now documented in:
+
+- `docs/GitLabRuntimeProfiles.md`
 
 ## Target Production GitLab Workflow Model
 

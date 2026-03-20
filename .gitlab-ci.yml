@@ -558,6 +558,9 @@ distroless-build-test-push-rehearsal:
 # EKS, Helm, cross-cloud, namespace, nightly, and variant paths live here. The production target is a
 # smaller number of parameterized runtime modules, but these jobs preserve source-workflow traceability
 # during the migration program.
+# The active EKS and Helm runtimes now support profile-driven partitioning:
+# - EKS: STAGING_INT_TEST_PROFILE=managersecret|smoke|appframework|full|custom
+# - Helm: STAGING_HELM_TEST_PROFILE=smoke|clustered|apps|full|custom
 int-test-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
@@ -572,11 +575,11 @@ int-test-workflow-rehearsal:
     WORKFLOW_CLASS: integration-eks
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_EKS_INTEGRATION
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
-    WORKFLOW_NOTES: This job now executes the first real staging-only EKS integration runtime. It reuses the standard build artifact, mirrors the Splunk Enterprise image into staging ECR, provisions an ephemeral EKS cluster, runs one integration focus selected by STAGING_INT_TEST_FOCUS, and always performs cleanup.
+    WORKFLOW_NOTES: This job now executes the first real staging-only EKS integration runtime. It reuses the standard build artifact, mirrors the Splunk Enterprise image into staging ECR, provisions an ephemeral EKS cluster, runs one integration profile selected by STAGING_INT_TEST_PROFILE, and always performs cleanup.
     WORKFLOW_PLAN: |
       1. Reuse the operator image already built into staging ECR by the standard build rehearsal.
       2. Mirror the configured Splunk Enterprise image into staging ECR only.
-      3. Create an ephemeral staging EKS cluster and run the selected integration focus.
+      3. Create an ephemeral staging EKS cluster and run the selected integration profile and focus.
       4. Collect JUnit and pod-log artifacts, run cleanup, and tear the cluster down.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
   artifacts:
@@ -712,11 +715,11 @@ helm-test-workflow-rehearsal:
     WORKFLOW_CLASS: integration-helm
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_HELM_TEST
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_TEST_VPC_ENDPOINT_URL,STAGING_SPLUNK_ENTERPRISE_IMAGE
-    WORKFLOW_NOTES: This workflow combines image build, EKS setup, helm packaging, and kuttl-based helm validation. It must remain fully staging-only.
+    WORKFLOW_NOTES: This workflow combines image build, EKS setup, helm packaging, and kuttl-based helm validation. It must remain fully staging-only and now supports profile-driven suite partitioning through STAGING_HELM_TEST_PROFILE.
     WORKFLOW_PLAN: |
       1. Build the operator image into staging ECR.
       2. Package the helm chart locally in the pipeline.
-      3. Run kuttl-based helm validation against a disposable staging EKS cluster.
+      3. Run the selected KUTTL suite profile against a disposable staging EKS cluster.
       4. Do not call the public GitHub Pages helm repository during rehearsal except for read-only validation.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/helm-test-workflow-rehearsal.sh
   artifacts:
@@ -833,6 +836,13 @@ arm-al2023-int-test-workflow-rehearsal:
 
 # Release and administration family
 # These jobs remain staging-safe and mostly rehearsal-first until the release-train implementation is complete.
+# The production target is a linked release train:
+# - promote develop to main via GitLab MR
+# - prepare release content and version updates
+# - build and validate RC artifacts
+# - publish final release artifacts
+# - publish charts
+# - publish bundles and catalogs
 pre-release-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template

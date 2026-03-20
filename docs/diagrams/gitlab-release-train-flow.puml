@@ -1,0 +1,27 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Dynamic.puml
+
+title Splunk Operator GitLab Release Train Flow
+LAYOUT_WITH_LEGEND()
+
+Person(release_mgr, "Release Engineer", "Approves and initiates release transitions")
+Person(maintainer, "Maintainer", "Reviews release MR and validation gates")
+System_Ext(public_targets, "Public Targets", "GitHub mirror, public registries, public chart destinations")
+
+System_Boundary(gitlab_boundary, "GitLab Authoritative Release Plane") {
+  Container(repo, "GitLab Repo", "GitLab project", "Release MR, tags, releases, and schedules")
+  Container(ci, "GitLab Release Train", "GitLab CI", "Governance, pre-release, RC build, final publish, charts, bundle")
+  ContainerDb(vars, "GitLab Variables", "Protected variables", "Release credentials, signing keys, chart and bundle destinations")
+  Container(release_obj, "GitLab Release", "GitLab release object", "Canonical release metadata and assets")
+}
+
+Rel(release_mgr, repo, "1. Starts release action or approves release MR")
+Rel(maintainer, repo, "2. Reviews and approves governance gate")
+Rel(repo, ci, "3. Starts the linked release train")
+Rel(ci, vars, "4. Reads release credentials and signing material")
+Rel(ci, repo, "5. Creates release MR updates, tags, and release metadata")
+Rel(ci, release_obj, "6. Publishes canonical GitLab release")
+Rel(ci, public_targets, "7. Mirrors validated outputs", "Only after GitLab release success")
+
+SHOW_LEGEND()
+@enduml

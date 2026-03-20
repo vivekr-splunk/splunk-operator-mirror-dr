@@ -14,6 +14,12 @@
 - A diagram set now exists in:
   - `docs/GitLabCIArchitectureDiagrams.md`
   - use that document to view the C4 runtime flow and component diagrams plus the generated PNG links
+- Runtime partition documentation now exists in:
+  - `docs/GitLabRuntimeProfiles.md`
+  - use that document to understand the EKS and Helm profile model for long-running GitLab jobs
+- Release-train documentation now exists in:
+  - `docs/GitLabReleaseTrainArchitecture.md`
+  - use that document to understand how the GitHub release workflows collapse into one authoritative GitLab release train
 - The GitLab CI structure has now been refactored into reusable workflow families instead of continuing to grow as one job per legacy GitHub workflow:
   - shared rule families for:
     - core CI
@@ -124,6 +130,12 @@
     - this skips the already-proven verify, test, and security jobs
     - it runs only the standard build rehearsal plus the dependent Trivy scan so failing image-path changes can be validated quickly before rerunning the full MR workflow
   - both runtime paths remain disabled until `STAGING_EXECUTE_BUILD_TEST_PUSH=true` is set
+- The long-running runtime families now support profile-driven partitioning:
+  - EKS integration:
+    - `STAGING_INT_TEST_PROFILE=managersecret|smoke|appframework|full|custom`
+  - Helm KUTTL:
+    - `STAGING_HELM_TEST_PROFILE=smoke|clustered|apps|full|custom`
+  - this does not yet replace the final production partition design, but it provides a stable contract for smaller GitLab runtime slices instead of a single monolithic job shape
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:
   - `build-test-push-workflow.yml`
   - `distroless-build-test-push-workflow.yml`

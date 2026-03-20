@@ -7,6 +7,10 @@ It is meant to answer two questions quickly:
 - how the end-to-end GitLab CI flow is intended to work
 - how the workflow families, runtime scripts, and external systems are partitioned inside the repo
 
+For the narrower release-train view, use:
+
+- `docs/GitLabReleaseTrainArchitecture.md`
+
 ## Generated PNGs
 
 ### C4 Runtime Flow

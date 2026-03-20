@@ -1,0 +1,39 @@
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Splunk Operator GitLab Release Train Components
+LAYOUT_LEFT_RIGHT()
+
+ContainerDb(vars, "GitLab Release Variables", "GitLab variables", "Release credentials, staging/public targets, signing inputs")
+System_Ext(public_targets, "Public Targets", "Public registries, GitHub mirror, chart destinations")
+
+Container_Boundary(release_boundary, "GitLab Release Train") {
+  Component(governance, "Governance Stage", "GitLab jobs", "Promote develop to main through a GitLab MR and approval gates")
+  Component(pre_release, "Pre-Release Stage", "GitLab jobs", "Version updates, changelog draft, release branch preparation")
+  Component(rc_build, "RC Build Stage", "GitLab jobs", "RC image build, artifact generation, RC publication to staging release targets")
+  Component(validation, "Validation Gates", "GitLab jobs", "Smoke, integration, security, and approval gates before final release")
+  Component(final_release, "Final Release Stage", "GitLab jobs", "Promote RC to final release, sign, verify, and create GitLab release")
+  Component(chart_release, "Chart Release Stage", "GitLab jobs", "Package and publish charts")
+  Component(bundle_release, "Bundle / Catalog Stage", "GitLab jobs", "Build and push bundle and catalog artifacts")
+  Component(mirror_sync, "Mirror Sync Stage", "GitLab jobs", "Push approved public-facing outputs downstream")
+}
+
+Rel(governance, pre_release, "starts")
+Rel(pre_release, rc_build, "feeds release inputs")
+Rel(rc_build, validation, "produces RC artifacts")
+Rel(validation, final_release, "gates promotion")
+Rel(final_release, chart_release, "unlocks downstream publication")
+Rel(final_release, bundle_release, "unlocks downstream publication")
+Rel(chart_release, mirror_sync, "publishes validated chart outputs")
+Rel(bundle_release, mirror_sync, "publishes validated bundle outputs")
+
+Rel(governance, vars, "reads governance inputs")
+Rel(pre_release, vars, "reads release metadata inputs")
+Rel(rc_build, vars, "reads release registry credentials")
+Rel(final_release, vars, "reads signing and publication credentials")
+Rel(chart_release, vars, "reads chart release credentials")
+Rel(bundle_release, vars, "reads bundle release credentials")
+Rel(mirror_sync, public_targets, "mirrors approved public outputs")
+
+SHOW_LEGEND()
+@enduml

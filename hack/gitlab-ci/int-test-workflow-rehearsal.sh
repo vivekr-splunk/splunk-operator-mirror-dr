@@ -48,16 +48,13 @@ if [ -z "${RESOLVED_ECR_REGION}" ]; then
 fi
 
 enterprise_image="${STAGING_SPLUNK_ENTERPRISE_IMAGE#docker.io/}"
-test_focus="${STAGING_INT_TEST_FOCUS:-managersecret}"
+requested_profile="${STAGING_INT_TEST_PROFILE:-managersecret}"
+resolve_integration_profile "${requested_profile}"
+test_focus="${RESOLVED_INT_TEST_FOCUS}"
 safe_test_focus="$(sanitize_slug "${test_focus}")"
 cluster_name_prefix="${STAGING_EKS_CLUSTER_NAME_PREFIX:-eks-integration-test-cluster}"
-cluster_nodes="${STAGING_INT_CLUSTER_NODES:-1}"
-cluster_workers="${STAGING_INT_CLUSTER_WORKERS:-3}"
-
-if printf '%s' "${test_focus}" | grep -q "appframework"; then
-  cluster_nodes="${STAGING_INT_APPFRAMEWORK_CLUSTER_NODES:-2}"
-  cluster_workers="${STAGING_INT_APPFRAMEWORK_CLUSTER_WORKERS:-5}"
-fi
+cluster_nodes="${STAGING_INT_CLUSTER_NODES:-${RESOLVED_INT_CLUSTER_NODES_DEFAULT}}"
+cluster_workers="${STAGING_INT_CLUSTER_WORKERS:-${RESOLVED_INT_CLUSTER_WORKERS_DEFAULT}}"
 
 export AWS_DEFAULT_REGION="${RESOLVED_ECR_REGION}"
 export AWS_REGION="${RESOLVED_ECR_REGION}"
@@ -70,7 +67,7 @@ export SPLUNK_ENTERPRISE_IMAGE="${enterprise_image}"
 normalize_testenv_commit_hash "${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}" 8
 export COMMIT_HASH="${NORMALIZED_TESTENV_COMMIT_HASH}"
 export TEST_FOCUS="${test_focus}"
-export TEST_TO_SKIP="${STAGING_INT_TEST_TO_SKIP:-${integration_skip_regex}}"
+export TEST_TO_SKIP="${STAGING_INT_TEST_TO_SKIP:-${RESOLVED_INT_TEST_TO_SKIP_DEFAULT:-${integration_skip_regex}}}"
 export TEST_CLUSTER_PLATFORM="eks"
 export TEST_CLUSTER_NAME="${cluster_name_prefix}-${safe_test_focus}-${CI_JOB_ID}"
 export CLUSTER_WIDE="${STAGING_INT_CLUSTER_WIDE:-true}"
@@ -88,7 +85,9 @@ export EKS_CLUSTER_K8_VERSION="${STAGING_EKS_CLUSTER_K8_VERSION:-${EKS_CLUSTER_K
 append_context "${context_file}" "input_artifact" "rehearsal/build-test-push-workflow-image-ref.txt"
 append_context "${context_file}" "ecr_registry_present" "true"
 append_context "${context_file}" "ecr_region_source" "${RESOLVED_ECR_REGION_SOURCE}"
+append_context "${context_file}" "test_profile" "${RESOLVED_INT_TEST_PROFILE}"
 append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
+append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
 append_context "${context_file}" "cluster_name" "${TEST_CLUSTER_NAME}"
 append_context "${context_file}" "cluster_workers" "${CLUSTER_WORKERS}"
 append_context "${context_file}" "cluster_nodes" "${CLUSTER_NODES}"
