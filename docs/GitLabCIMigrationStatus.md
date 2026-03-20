@@ -69,6 +69,8 @@
     - it does not update `latest`
     - it limits the first runtime proof to `linux/amd64`
     - it runs Trivy against the staging ECR image in GitLab rather than uploading SARIF into GitHub Security
+  - the distroless and ARM build/runtime families now have concrete buildx and integration scripts, explicit build-artifact dependency wiring, and explicit staging enterprise-image requirements
+  - those distroless and ARM families are executable on demand, but they still need runtime proof before they count as fully proven
 
 ## Present Versus Proven
 
@@ -125,8 +127,12 @@
   - GCP integration family
   - distroless integration family
   - ARM build and integration families
-  - namespace-scope/manual/nightly EKS variants
   - release promotion to official public destinations
+- Executed but still under stabilization:
+  - namespace-scope/manual/nightly EKS variants
+    - the first real MR run entered those jobs and exposed an under-partitioned runtime shape
+    - namespace-scope and manual paths failed inside the Ginkgo suite after nearly `7h` on long `managersecret` cases while waiting for Monitoring Console readiness
+    - the current fix narrows those workflows to representative profile slices plus an explicit `TEST_TIMEOUT` contract instead of one large inherited profile
 
 Interpretation:
 
@@ -147,7 +153,7 @@ Interpretation:
 - cosign signing execution for release-focused workflows
 - Trivy image-scan execution against staging images
 - EKS, AKS, and GKE integration execution against staging clusters
-- ARM and distroless execution against staging variant images
+- remaining runtime proof for the ARM and distroless staging variant slices
 - release, bundle, and chart publication execution against staging destinations
 - public-registry publication for pre-release and release workflows
 - GitHub intake automation replacement
@@ -165,6 +171,11 @@ Interpretation:
 - The `envtest` helper in `Makefile` is pinned to `sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20240813183042-b901db121e1f`, which is the installable nested-module revision from the controller-runtime `v0.19.0` source tree.
 - The `ginkgo` helper in `Makefile` is now pinned to `github.com/onsi/ginkgo/v2/ginkgo@v2.23.4` and no longer runs `go get`, so `make vet` does not rewrite module dependencies under the internal Go `1.25.x` base image.
 - The `enterprise` package test suite exposed an environment-dependent assumption in `TestCreateAppDownloadDir`: the old invalid path `/xyzzz.txt` only failed on non-root shells. The test now uses a child path under a real file, and `createAppDownloadDir` now returns non-`ErrNotExist` stat errors instead of silently swallowing them.
+- The distroless and ARM rehearsal families now use the shared buildx helper plus the integration runtime helper directly:
+  - distroless build jobs emit `rehearsal/distroless-build-test-push-workflow-image-ref.txt`
+  - ARM build jobs emit matching `rehearsal/arm-*-build-test-push-workflow-image-ref.txt` artifacts
+  - integration jobs consume those artifacts through explicit `BUILD_IMAGE_REF_FILE` wiring and preserve JUnit reports
+  - distroless and ARM integration jobs now require `STAGING_SPLUNK_ENTERPRISE_IMAGE` explicitly so the runtime contract is visible in GitLab instead of being inherited implicitly
 - The first security slice adds `semgrep-scan` and `fossa-scan` jobs with GitHub-equivalent MR and `main`/`develop` trigger intent. These jobs are staging-safe: if `SEMGREP_APP_TOKEN` or `FOSSA_API_TOKEN` is not loaded in GitLab yet, they emit an explicit skip artifact instead of silently disappearing from the pipeline.
 - Current registry policy for the rehearsal is internal-only and Artifactory-first by target design:
   - standard, distroless, ARM, smoke, integration, helm, scan, and release-preparation paths should use internal Artifactory-backed Docker and generic artifact repositories where that wiring is available
@@ -216,6 +227,10 @@ Interpretation:
 - The long-running runtime families now support profile-driven partitioning:
   - EKS integration:
     - `STAGING_INT_TEST_PROFILE=managersecret|smoke|appframework|full|custom`
+    - narrower representative slices now also exist for long-lived legacy EKS families:
+      - `managersecret-smoke-s1`
+      - `managersecret-smoke-c3`
+      - `licensemanager-smoke-s1`
   - Helm KUTTL:
     - `STAGING_HELM_TEST_PROFILE=smoke|clustered|apps|full|custom`
   - this does not yet replace the final production partition design, but it provides a stable contract for smaller GitLab runtime slices instead of a single monolithic job shape
@@ -224,6 +239,7 @@ Interpretation:
     - `namespace-scope-int-workflow-rehearsal`
     - `manual-int-test-workflow-rehearsal`
     - `nightly-int-test-workflow-rehearsal`
+  - the EKS runtime now exports `TEST_TIMEOUT` so long-running suites can be tuned per workflow family instead of relying on the hard-coded `7h` default in `test/trigger-tests.sh`
   - chart release now has a staging-safe dry-run script in:
     - `hack/gitlab-ci/release-charts-workflow-rehearsal.sh`
   - current machine-generated readiness audit summary:

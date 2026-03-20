@@ -216,6 +216,34 @@ default:
     - job: build-test-push-rehearsal
       artifacts: true
 
+.needs-distroless-build:
+  dependencies:
+    - distroless-build-test-push-rehearsal
+  needs:
+    - job: distroless-build-test-push-rehearsal
+      artifacts: true
+
+.needs-arm-ubuntu-build:
+  dependencies:
+    - arm-ubuntu-build-test-push-rehearsal
+  needs:
+    - job: arm-ubuntu-build-test-push-rehearsal
+      artifacts: true
+
+.needs-arm-rhel-build:
+  dependencies:
+    - arm-rhel-build-test-push-rehearsal
+  needs:
+    - job: arm-rhel-build-test-push-rehearsal
+      artifacts: true
+
+.needs-arm-al2023-build:
+  dependencies:
+    - arm-al2023-build-test-push-rehearsal
+  needs:
+    - job: arm-al2023-build-test-push-rehearsal
+      artifacts: true
+
 # Shared trigger rules
 # The migration keeps trigger logic centralized so MR, branch, schedule, web, and short-loop debug modes
 # do not drift across workflow families.
@@ -566,11 +594,17 @@ distroless-build-test-push-rehearsal:
     WORKFLOW_CLASS: build-variant
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_DISTROLESS_BUILD
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
-    WORKFLOW_NOTES: This job tracks the distroless image and smoke-test path. Cosign signing remains deferred, and production DockerHub publication remains explicitly out of scope for this rehearsal.
+    WORKFLOW_NOTES: This job now has a concrete staging-safe buildx execution path. It builds the distroless image only to internal staging ECR, records image ref and digest artifacts, and leaves cosign plus DockerHub/public release publication deferred to the later release slice.
     WORKFLOW_PLAN: |
       1. Build the distroless operator image to a staging registry only.
       2. Rehearse the distroless smoke-test path against staging EKS resources.
       3. Record cosign sign and verify as deferred until the dedicated release workflow migration slice.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/build-test-push-buildx-rehearsal.sh
+    BUILD_MODE: buildx
+    BUILD_PLATFORMS: linux/amd64,linux/arm64
+    BASE_IMAGE: gcr.io/distroless/static-debian12
+    BASE_IMAGE_VERSION: latest
+    IMAGE_TAG_SUFFIX: -distroless
 
 # Runtime validation family
 # EKS, Helm, cross-cloud, namespace, nightly, and variant paths live here. The production target is a
@@ -621,14 +655,16 @@ namespace-scope-int-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/namespace-scope-int-workflow.yml
     WORKFLOW_CLASS: integration-eks-namespace-scope
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_NAMESPACE_SCOPE_INTEGRATION
-    JOB_INT_TEST_PROFILE: managersecret
+    JOB_INT_TEST_PROFILE: managersecret-smoke-s1
+    JOB_INT_TEST_TIMEOUT: 3h
     JOB_INT_CLUSTER_WIDE: "false"
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This workflow is schedule-driven in GitHub. The GitLab rehearsal keeps it schedule-driven, with an MR manual hook for non-production validation.
     WORKFLOW_PLAN: |
-      1. Run the namespace-scope integration matrix with CLUSTER_WIDE=false.
+      1. Run a representative namespace-scope smoke slice with CLUSTER_WIDE=false.
       2. Use staging EKS resources only.
       3. Preserve log collection and teardown in the same job flow.
+      4. Keep the legacy full matrix as a later expansion once the smaller profile slices are stable.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
   artifacts:
     when: always
@@ -651,13 +687,14 @@ manual-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/manual-int-test-workflow.yml
     WORKFLOW_CLASS: integration-eks-manual
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_MANUAL_INTEGRATION
-    JOB_INT_TEST_PROFILE: managersecret
+    JOB_INT_TEST_PROFILE: licensemanager-smoke-s1
+    JOB_INT_TEST_TIMEOUT: 3h
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This workflow remains manually invoked in GitLab. The execution path must use staging-only inputs and must not publish operator images to DockerHub.
     WORKFLOW_PLAN: |
       1. Accept CLUSTER_WIDE as a GitLab manual variable.
       2. Build and publish only to staging ECR.
-      3. Run the integration suite against ephemeral staging EKS resources.
+      3. Run a representative manual-path validation slice against ephemeral staging EKS resources.
       4. Do not push the int tag to DockerHub during rehearsal or production cutover.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
   artifacts:
@@ -681,13 +718,15 @@ nightly-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/nightly-int-test-workflow.yml
     WORKFLOW_CLASS: integration-eks-nightly
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_NIGHTLY_INTEGRATION
-    JOB_INT_TEST_PROFILE: full
+    JOB_INT_TEST_PROFILE: managersecret-smoke-c3
+    JOB_INT_TEST_TIMEOUT: 4h
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This job maps the scheduled nightly path. The legacy DockerHub edge publication is intentionally excluded from the staging rehearsal.
     WORKFLOW_PLAN: |
       1. Build the operator image in staging ECR from develop.
-      2. Run the nightly EKS integration suite against ephemeral staging infrastructure.
+      2. Run a representative nightly EKS validation slice against ephemeral staging infrastructure.
       3. Replace DockerHub edge publication with a staging-only validation artifact during rehearsal.
+      4. Expand back toward the legacy nightly matrix only after profile partitioning is stable.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
   artifacts:
     when: always
@@ -739,6 +778,8 @@ distroless-int-test-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-10h
+    - .required-rehearsal
+    - .needs-distroless-build
     - .rules-main-develop-mr
   variables:
     WORKFLOW_SLUG: distroless-int-test-workflow
@@ -746,12 +787,22 @@ distroless-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/distroless-int-test-workflow.yml
     WORKFLOW_CLASS: integration-eks-distroless
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_DISTROLESS_INTEGRATION
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: This job tracks the distroless integration path and must use staging-only registries and clusters.
+    JOB_INT_TEST_PROFILE: managersecret
+    BUILD_IMAGE_REF_FILE: rehearsal/distroless-build-test-push-workflow-image-ref.txt
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: This job now has a concrete distroless integration contract. It consumes the distroless build artifact emitted in the same pipeline, uses the staging enterprise image, and remains staging-only until runtime proof is complete.
     WORKFLOW_PLAN: |
       1. Build and pull the distroless operator image from staging ECR only.
       2. Run the distroless integration suite against staging EKS resources.
       3. Preserve teardown and log capture exactly as in GitHub.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/distroless-int-test-workflow-inttest-junit.xml
 
 helm-test-workflow-rehearsal:
   extends:
@@ -795,16 +846,23 @@ arm-ubuntu-build-test-push-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/arm-Ubuntu-build-test-push-workflow.yml
     WORKFLOW_CLASS: build-arm-ubuntu
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_UBUNTU_BUILD
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
-    WORKFLOW_NOTES: This workflow is manual in GitHub and remains manual in GitLab. It must target only staging ARM-compatible registries and images.
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
+    WORKFLOW_NOTES: This workflow is manual in GitHub and remains manual in GitLab. The first executable slice now uses the shared buildx helper to publish only to staging ECR and records build artifacts for observability.
     WORKFLOW_PLAN: |
       1. Build the ARM Ubuntu operator image against a staging repository only.
       2. Run the associated smoke-test path against staging-only dependencies.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/build-test-push-buildx-rehearsal.sh
+    BUILD_MODE: buildx
+    BUILD_PLATFORMS: linux/arm64,linux/amd64
+    BASE_IMAGE: ubuntu
+    BASE_IMAGE_VERSION: 24.10
 
 arm-ubuntu-int-test-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-arm-5h
+    - .required-rehearsal
+    - .needs-arm-ubuntu-build
     - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-ubuntu-int-test-workflow
@@ -812,11 +870,21 @@ arm-ubuntu-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/arm-Ubuntu-int-test-workflow.yml
     WORKFLOW_CLASS: integration-arm-ubuntu
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_UBUNTU_INTEGRATION
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: This workflow requires ARM Ubuntu enterprise images in staging and must not touch production ECR prefixes.
+    JOB_INT_TEST_PROFILE: managersecret
+    BUILD_IMAGE_REF_FILE: rehearsal/arm-ubuntu-build-test-push-workflow-image-ref.txt
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: This workflow now has a concrete ARM Ubuntu integration contract. It consumes the matching staging build artifact in the same pipeline and uses the staging enterprise image explicitly rather than an inherited production prefix.
     WORKFLOW_PLAN: |
       1. Build the ARM Ubuntu operator image into staging ECR.
       2. Run the ARM Ubuntu integration suite against staging EKS resources.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/arm-ubuntu-int-test-workflow-inttest-junit.xml
 
 arm-rhel-build-test-push-rehearsal:
   extends:
@@ -829,16 +897,23 @@ arm-rhel-build-test-push-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/arm-RHEL-build-test-push-workflow.yml
     WORKFLOW_CLASS: build-arm-rhel
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_RHEL_BUILD
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
-    WORKFLOW_NOTES: This workflow is manual in GitHub and must stay staging-only in GitLab.
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
+    WORKFLOW_NOTES: This workflow is manual in GitHub and must stay staging-only in GitLab. It now uses the shared buildx helper so the ARM RHEL build path can be executed with the same staging artifact contract as the other runtime families.
     WORKFLOW_PLAN: |
       1. Build the ARM RHEL operator image against staging ECR only.
       2. Validate the smoke-test prerequisites without touching production registries.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/build-test-push-buildx-rehearsal.sh
+    BUILD_MODE: buildx
+    BUILD_PLATFORMS: linux/arm64,linux/amd64
+    BASE_IMAGE: redhat/ubi9-minimal
+    BASE_IMAGE_VERSION: 9.5
 
 arm-rhel-int-test-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-arm-5h
+    - .required-rehearsal
+    - .needs-arm-rhel-build
     - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-rhel-int-test-workflow
@@ -846,11 +921,21 @@ arm-rhel-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/arm-RHEL-int-test-workflow.yml
     WORKFLOW_CLASS: integration-arm-rhel
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_RHEL_INTEGRATION
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: This workflow requires staging ARM RHEL images and staging-only EKS resources.
+    JOB_INT_TEST_PROFILE: managersecret
+    BUILD_IMAGE_REF_FILE: rehearsal/arm-rhel-build-test-push-workflow-image-ref.txt
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: This workflow now has a concrete ARM RHEL integration contract. It consumes the matching staging build artifact in the same pipeline and uses the staging enterprise image explicitly.
     WORKFLOW_PLAN: |
       1. Build the ARM RHEL operator image into staging ECR.
       2. Run the ARM RHEL integration path against staging EKS resources.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/arm-rhel-int-test-workflow-inttest-junit.xml
 
 arm-al2023-build-test-push-rehearsal:
   extends:
@@ -863,16 +948,23 @@ arm-al2023-build-test-push-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/arm-AL2023-build-test-push-workflow-AL2023.yml
     WORKFLOW_CLASS: build-arm-al2023
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_AL2023_BUILD
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
-    WORKFLOW_NOTES: This workflow is manual in GitHub and remains manual in GitLab for the rehearsal.
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
+    WORKFLOW_NOTES: This workflow is manual in GitHub and remains manual in GitLab for the rehearsal. It now uses the shared buildx helper so the AL2023 build path emits the same observability artifacts as the other staging build families.
     WORKFLOW_PLAN: |
       1. Build the ARM AL2023 operator image into staging ECR.
       2. Validate smoke-test prerequisites against staging-only dependencies.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/build-test-push-buildx-rehearsal.sh
+    BUILD_MODE: buildx
+    BUILD_PLATFORMS: linux/arm64,linux/amd64
+    BASE_IMAGE: public.ecr.aws/amazonlinux/amazonlinux
+    BASE_IMAGE_VERSION: 2023
 
 arm-al2023-int-test-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-arm-5h
+    - .required-rehearsal
+    - .needs-arm-al2023-build
     - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-al2023-int-test-workflow
@@ -880,11 +972,21 @@ arm-al2023-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/arm-AL2023-int-test-workflow.yml
     WORKFLOW_CLASS: integration-arm-al2023
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_AL2023_INTEGRATION
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_ECR_PREFIX,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: This workflow requires staging ARM AL2023 images and staging-only EKS resources.
+    JOB_INT_TEST_PROFILE: managersecret
+    BUILD_IMAGE_REF_FILE: rehearsal/arm-al2023-build-test-push-workflow-image-ref.txt
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: This workflow now has a concrete ARM AL2023 integration contract. It consumes the matching staging build artifact in the same pipeline and uses the staging enterprise image explicitly.
     WORKFLOW_PLAN: |
       1. Build the ARM AL2023 operator image into staging ECR.
       2. Run the ARM AL2023 integration path against staging EKS resources.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/arm-al2023-int-test-workflow-inttest-junit.xml
 
 # Release and administration family
 # These jobs remain staging-safe and mostly rehearsal-first until the release-train implementation is complete.
