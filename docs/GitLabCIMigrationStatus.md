@@ -84,6 +84,7 @@
 - The bootstrap pipeline now uses job-specific module flags: `format-and-vet` keeps writable module resolution, while `unit-tests` disables workspace mode and clears `GOFLAGS` before `make test`.
 - Go caches now live outside the repository tree so `controller-gen` does not scan downloaded modules under `paths="./..."`.
 - The pipeline also uses a new GitLab cache key and clears any restored `.cache/go` directory before job execution so stale archives from older rehearsals do not reintroduce repo-local module trees.
+- The `controller-gen` helper in `Makefile` is now pinned to `sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0`, replacing the older `v0.16.1` pin that failed under the group-rehearsal runner toolchain.
 - The `envtest` helper in `Makefile` is pinned to `sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20240813183042-b901db121e1f`, which is the installable nested-module revision from the controller-runtime `v0.19.0` source tree.
 - The `ginkgo` helper in `Makefile` is now pinned to `github.com/onsi/ginkgo/v2/ginkgo@v2.23.4` and no longer runs `go get`, so `make vet` does not rewrite module dependencies under the internal Go `1.25.x` base image.
 - The `enterprise` package test suite exposed an environment-dependent assumption in `TestCreateAppDownloadDir`: the old invalid path `/xyzzz.txt` only failed on non-root shells. The test now uses a child path under a real file, and `createAppDownloadDir` now returns non-`ErrNotExist` stat errors instead of silently swallowing them.
