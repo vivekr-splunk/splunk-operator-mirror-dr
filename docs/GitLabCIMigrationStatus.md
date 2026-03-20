@@ -192,6 +192,10 @@ Interpretation:
     - set `REHEARSAL_PIPELINE_MODE=build_scan`
     - this skips the already-proven verify, test, and security jobs
     - it runs only the standard build rehearsal plus the dependent Trivy scan so failing image-path changes can be validated quickly before rerunning the full MR workflow
+  - a release-chart fast path now exists for direct chart packaging validation:
+    - set `REHEARSAL_PIPELINE_MODE=chart_release`
+    - this skips verify, test, and security jobs
+    - it runs the release-chart rehearsal directly so chart packaging and index generation can be validated without waiting for the full MR graph
   - both runtime paths remain disabled until `STAGING_EXECUTE_BUILD_TEST_PUSH=true` is set
 - The long-running runtime families now support profile-driven partitioning:
   - EKS integration:

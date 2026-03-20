@@ -223,6 +223,8 @@ default:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
       when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "chart_release"'
+      when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
@@ -231,6 +233,8 @@ default:
 
 .rules-security-standard:
   rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "chart_release"'
+      when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
@@ -291,6 +295,7 @@ default:
 
 .rules-main-or-mr-manual:
   rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "chart_release"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
