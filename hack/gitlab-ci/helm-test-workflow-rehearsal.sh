@@ -8,6 +8,7 @@ cleanup_log="rehearsal/${WORKFLOW_SLUG}-cleanup.log"
 cluster_log="rehearsal/${WORKFLOW_SLUG}-cluster.log"
 kuttl_log="rehearsal/${WORKFLOW_SLUG}-kuttl.log"
 kuttl_artifacts_dir="rehearsal/${WORKFLOW_SLUG}-kuttl-artifacts"
+helm_junit="rehearsal/${WORKFLOW_SLUG}-kuttl-junit.xml"
 
 log_step() {
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
@@ -75,6 +76,7 @@ append_context "${context_file}" "cluster_name" "${TEST_CLUSTER_NAME}"
 append_context "${context_file}" "ecr_region_source" "${RESOLVED_ECR_REGION_SOURCE}"
 append_context "${context_file}" "helm_version" "${HELM_VERSION}"
 append_context "${context_file}" "kuttl_version" "${KUTTL_VERSION}"
+append_context "${context_file}" "job_timeout" "${CI_JOB_TIMEOUT:-unknown}"
 
 cleanup_and_exit() {
   rc="$1"
@@ -140,6 +142,10 @@ log_step "registry:enterprise-image:complete ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 log_step "cluster:up ${TEST_CLUSTER_NAME}"
 make cluster-up 2>&1 | tee -a "${cluster_log}"
 log_step "cluster:up:complete"
+log_step "cluster:snapshot:nodes"
+kubectl get nodes -o wide 2>&1 | tee -a "${cluster_log}"
+log_step "cluster:snapshot:pods"
+kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 
 log_step "cluster:addons:metrics-server"
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml 2>&1 | tee -a "${cluster_log}"
@@ -169,3 +175,14 @@ append_context "${context_file}" "kuttl_enterprise_image" "${KUTTL_SPLUNK_ENTERP
 log_step "tests:helm-kuttl:start"
 kubectl kuttl test --config "${CI_PROJECT_DIR}/kuttl/kuttl-test-helm.yaml" --report xml 2>&1 | tee -a "${kuttl_log}"
 log_step "tests:helm-kuttl:complete"
+
+if [ -f "${CI_PROJECT_DIR}/kuttl-report.xml" ]; then
+  cp "${CI_PROJECT_DIR}/kuttl-report.xml" "${helm_junit}"
+elif [ -f "${CI_PROJECT_DIR}/TEST-kuttl-report.xml" ]; then
+  cp "${CI_PROJECT_DIR}/TEST-kuttl-report.xml" "${helm_junit}"
+else
+  first_xml="$(find "${CI_PROJECT_DIR}/kuttl-artifacts" -maxdepth 2 -type f -name '*.xml' 2>/dev/null | head -1 || true)"
+  if [ -n "${first_xml}" ] && [ -f "${first_xml}" ]; then
+    cp "${first_xml}" "${helm_junit}"
+  fi
+fi

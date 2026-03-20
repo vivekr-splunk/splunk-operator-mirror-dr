@@ -93,6 +93,7 @@ append_context "${context_file}" "normalized_commit_hash" "${COMMIT_HASH}"
 append_context "${context_file}" "kubectl_version" "${KUBECTL_VERSION}"
 append_context "${context_file}" "eksctl_version" "${EKSCTL_VERSION}"
 append_context "${context_file}" "ecr_registry" "${ECR_REGISTRY}"
+append_context "${context_file}" "job_timeout" "${CI_JOB_TIMEOUT:-unknown}"
 
 cleanup_and_exit() {
   rc="$1"
@@ -154,6 +155,10 @@ log_step "registry:ecr-login:complete"
 log_step "cluster:up ${TEST_CLUSTER_NAME}"
 make cluster-up 2>&1 | tee -a "${cluster_log}"
 log_step "cluster:up:complete"
+log_step "cluster:snapshot:nodes"
+kubectl get nodes -o wide 2>&1 | tee -a "${cluster_log}"
+log_step "cluster:snapshot:pods"
+kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 
 log_step "cluster:addons:metrics-server"
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml 2>&1 | tee -a "${cluster_log}"

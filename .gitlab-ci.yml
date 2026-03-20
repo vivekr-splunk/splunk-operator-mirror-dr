@@ -480,6 +480,8 @@ int-test-workflow-rehearsal:
   stage: integration
   allow_failure: false
   interruptible: false
+  timeout: 4h
+  resource_group: staging-eks-runtime
   dependencies:
     - build-test-push-rehearsal
   needs:
@@ -646,6 +648,8 @@ helm-test-workflow-rehearsal:
   stage: integration
   allow_failure: false
   interruptible: false
+  timeout: 3h
+  resource_group: staging-eks-runtime
   dependencies:
     - build-test-push-rehearsal
   needs:
@@ -671,6 +675,13 @@ helm-test-workflow-rehearsal:
       3. Run kuttl-based helm validation against a disposable staging EKS cluster.
       4. Do not call the public GitHub Pages helm repository during rehearsal except for read-only validation.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/helm-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/helm-test-workflow-kuttl-junit.xml
 
 arm-ubuntu-build-test-push-rehearsal:
   extends: .workflow-rehearsal-template
