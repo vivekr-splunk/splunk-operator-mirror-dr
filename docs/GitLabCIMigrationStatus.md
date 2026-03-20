@@ -10,6 +10,7 @@
   - `74841007` `Add release-train docs and runtime profiles`
   - `f649760b` `Expand executable GitLab workflow scenarios`
   - `14138ecc` `Fix group rehearsal unit test toolchain`
+  - `81b94b08` `Wire release-train dry-run workflows`
 - A separate architecture review now exists in:
   - `docs/GitLabWorkflowArchitectureReview.md`
   - use that document to answer:
@@ -97,21 +98,35 @@
   - `fossa-scan`
   - `build-test-push-rehearsal`
   - `build-test-push-trivy-scan`
-  - `helm-test-workflow-rehearsal`
-- Live in group rehearsal but not yet closed as fully proven:
   - `int-test-workflow-rehearsal`
-    - current evidence:
-      - API pipeline `35055608`
-      - build job `205824780`: `success`
-      - Trivy job `205824781`: `success`
-      - integration job `205824782`: `running`
+  - `helm-test-workflow-rehearsal`
+  - `pre-release-workflow-rehearsal`
+  - `automated-release-workflow-rehearsal`
+  - `bundle-push-post-release-rehearsal`
+  - `release-charts-workflow-rehearsal`
+  - `merge-develop-to-main-workflow-rehearsal`
+- Dedicated fast-path proof points now exist:
+  - EKS runtime:
+    - pipeline `35056838`
+    - jobs:
+      - `205839643` `build-test-push-rehearsal`: `success`
+      - `205839644` `build-test-push-trivy-scan`: `success`
+      - `205839645` `int-test-workflow-rehearsal`: `success`
+  - release train:
+    - pipeline `35057999`
+    - jobs:
+      - `205852798` `pre-release-workflow-rehearsal`: `success`
+      - `205852799` `automated-release-workflow-rehearsal`: `success`
+      - `205852800` `bundle-push-post-release-rehearsal`: `success`
+      - `205852801` `release-charts-workflow-rehearsal`: `success`
+      - `205852802` `merge-develop-to-main-workflow-rehearsal`: `success`
 - Present in the modularized graph but not yet executed end to end:
   - Azure integration family
   - GCP integration family
   - distroless integration family
   - ARM build and integration families
-  - release family
-  - administration family
+  - namespace-scope/manual/nightly EKS variants
+  - release promotion to official public destinations
 
 Interpretation:
 
@@ -121,9 +136,9 @@ Interpretation:
 - Final production readiness still requires every authoritative family to move from "present" to "executed and validated."
 - Current machine-generated readiness summary for the group project:
   - runnable now:
-    - `8`
+    - `12`
   - design-only:
-    - `15`
+    - `11`
 
 ## Not Yet Migrated
 
@@ -151,9 +166,10 @@ Interpretation:
 - The `ginkgo` helper in `Makefile` is now pinned to `github.com/onsi/ginkgo/v2/ginkgo@v2.23.4` and no longer runs `go get`, so `make vet` does not rewrite module dependencies under the internal Go `1.25.x` base image.
 - The `enterprise` package test suite exposed an environment-dependent assumption in `TestCreateAppDownloadDir`: the old invalid path `/xyzzz.txt` only failed on non-root shells. The test now uses a child path under a real file, and `createAppDownloadDir` now returns non-`ErrNotExist` stat errors instead of silently swallowing them.
 - The first security slice adds `semgrep-scan` and `fossa-scan` jobs with GitHub-equivalent MR and `main`/`develop` trigger intent. These jobs are staging-safe: if `SEMGREP_APP_TOKEN` or `FOSSA_API_TOKEN` is not loaded in GitLab yet, they emit an explicit skip artifact instead of silently disappearing from the pipeline.
-- Current registry policy for the rehearsal is internal-registry-only:
-  - standard, distroless, ARM, smoke, integration, helm, and scan paths should use staging ECR, ACR, GAR, or internal bundle/chart targets only
-  - DockerHub stays out of scope until the pre-release and release publication workflows are implemented intentionally later
+- Current registry policy for the rehearsal is internal-only and Artifactory-first by target design:
+  - standard, distroless, ARM, smoke, integration, helm, scan, and release-preparation paths should use internal Artifactory-backed Docker and generic artifact repositories where that wiring is available
+  - staging ECR, ACR, GAR, or other internal release targets remain acceptable only as interim rehearsal substrates while this repo is being moved toward the Artifactory/Vault/`creds-helper` model already used by internal GitLab automation
+  - DockerHub, GitHub Releases, GitHub Pages, and any official public operator publication surface stay out of scope until the approved official release phase
 - The bias-language, `kubectl-splunk`, Semgrep, and Trivy helper paths now use Python virtual environments on the internal CI image so they remain compatible with Debian PEP 668 package-management protections.
 - The bias-language job installs the linter dependencies explicitly and runs the linter from its own checkout directory with an explicit error-file path to avoid GitHub-only assumptions in the helper tool.
 - The `kubectl-splunk` job uses the actual package path `tools/kubectl-splunk`.
@@ -212,9 +228,9 @@ Interpretation:
     - `hack/gitlab-ci/release-charts-workflow-rehearsal.sh`
   - current machine-generated readiness audit summary:
     - runnable now:
-      - `8`
+      - `12`
     - design-only:
-      - `15`
+      - `11`
 - The newly added workflow-level rehearsal jobs cover these GitHub workflow classes:
   - `build-test-push-workflow.yml`
   - `distroless-build-test-push-workflow.yml`
