@@ -4,6 +4,28 @@
 
 - Repository history has been imported into GitLab.
 - The initial GitLab CI slice has been added.
+- A separate architecture review now exists in:
+  - `docs/GitLabWorkflowArchitectureReview.md`
+  - use that document to answer:
+    - which GitHub workflows are covered
+    - which ones are intentionally merged into shared GitLab jobs
+    - where duplication still exists
+    - what the target production-grade GitLab automation model should be
+- The GitLab CI structure has now been refactored into reusable workflow families instead of continuing to grow as one job per legacy GitHub workflow:
+  - shared rule families for:
+    - core CI
+    - security
+    - active build/debug paths
+    - release/manual/scheduled governance paths
+  - shared execution families for:
+    - build jobs
+    - image-scan jobs
+    - long-running integration jobs
+    - ARM integration jobs
+    - release jobs
+    - administration jobs
+  - shared downstream dependency wiring for the standard build artifact consumers
+  - this reduces duplication in trigger rules, timeout policy, interruptibility, and `needs` / `dependencies` wiring
 - This first slice covers:
   - merge request pipelines
   - `main` branch pipelines
@@ -64,6 +86,10 @@
 - The bias-language job installs the linter dependencies explicitly and runs the linter from its own checkout directory with an explicit error-file path to avoid GitHub-only assumptions in the helper tool.
 - The `kubectl-splunk` job uses the actual package path `tools/kubectl-splunk`.
 - The workflow-rehearsal scaffold template now uses the same internal CI base image and still clears inherited `before_script` and artifact `dependencies` so rehearsal-plan jobs do not execute the repository-wide bootstrap.
+- The workflow-rehearsal layer is no longer only a flat list of workflow-shaped jobs:
+  - core reusable families now centralize stage intent, timeout policy, interruptibility, and common rule sets
+  - the build and Helm runtime jobs now reuse a shared standard-build dependency contract instead of duplicating `needs` and `dependencies`
+  - this is the first production-grade structural refactor of the GitLab CI file, even though several runtime families are still scaffolded rather than fully executable
 - The workflow-rehearsal scaffold now emits a dedicated `context.txt` artifact for each job with safe CI metadata:
   - observed timestamp
   - pipeline mode

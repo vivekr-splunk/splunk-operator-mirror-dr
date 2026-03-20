@@ -171,8 +171,41 @@ default:
       - rehearsal/${WORKFLOW_SLUG}-trivy-results.sarif
       - rehearsal/${WORKFLOW_SLUG}-trivy-results.txt
 
-format-and-vet:
-  stage: verify
+.required-rehearsal:
+  allow_failure: false
+
+.build-family:
+  stage: build
+
+.image-scan-family:
+  stage: image_scan
+
+.integration-family-10h:
+  stage: integration
+  interruptible: false
+  timeout: 10h
+
+.integration-family-arm-5h:
+  stage: integration
+  interruptible: false
+  timeout: 5h
+
+.release-family:
+  stage: release
+  interruptible: false
+
+.administration-family:
+  stage: administration
+  interruptible: false
+
+.needs-standard-build:
+  dependencies:
+    - build-test-push-rehearsal
+  needs:
+    - job: build-test-push-rehearsal
+      artifacts: true
+
+.rules-core-standard:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
       when: never
@@ -181,6 +214,80 @@ format-and-vet:
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
       when: never
     - when: on_success
+
+.rules-security-standard:
+  rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+      when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+.rules-build-active:
+  rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+.rules-build-scan-and-eks:
+  rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+.rules-main-develop-mr:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+.rules-eks-integration-or-main-develop-mr:
+  rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+.rules-helm-integration-or-main-develop-mr-or-web:
+  rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+.rules-web-or-mr-manual:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+
+.rules-schedule-or-mr-manual:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+
+.rules-main-or-mr-manual:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+
+.rules-mr-only:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+format-and-vet:
+  stage: verify
+  extends: .rules-core-standard
   variables:
     GOFLAGS: "-mod=mod"
   script:
@@ -189,14 +296,7 @@ format-and-vet:
 
 bias-language:
   stage: verify
-  rules:
-    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
-      when: never
-    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
-      when: never
-    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
-      when: never
-    - when: on_success
+  extends: .rules-core-standard
   before_script:
     - |
       set -eu
@@ -235,14 +335,7 @@ bias-language:
 
 unit-tests:
   stage: test
-  rules:
-    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
-      when: never
-    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
-      when: never
-    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
-      when: never
-    - when: on_success
+  extends: .rules-core-standard
   needs:
     - format-and-vet
   variables:
@@ -264,14 +357,7 @@ unit-tests:
 
 kubectl-splunk-tests:
   stage: test
-  rules:
-    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
-      when: never
-    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
-      when: never
-    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
-      when: never
-    - when: on_success
+  extends: .rules-core-standard
   before_script:
     - |
       set -eu
@@ -313,14 +399,7 @@ kubectl-splunk-tests:
 
 semgrep-scan:
   stage: security
-  rules:
-    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
-      when: never
-    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  extends: .rules-security-standard
   script:
     - |
       set -eu
@@ -356,14 +435,7 @@ semgrep-scan:
 
 fossa-scan:
   stage: security
-  rules:
-    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
-      when: never
-    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  extends: .rules-security-standard
   script:
     - |
       if [ -z "${FOSSA_API_TOKEN:-}" ]; then
@@ -399,17 +471,12 @@ fossa-scan:
       - fossa-scan.log
 
 build-test-push-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: build
-  allow_failure: false
+  extends:
+    - .workflow-rehearsal-template
+    - .build-family
+    - .required-rehearsal
+    - .rules-build-active
   before_script: []
-  rules:
-    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
-    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
-    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
   variables:
     WORKFLOW_SLUG: build-test-push-workflow
     WORKFLOW_NAME: Build and Test
@@ -426,21 +493,17 @@ build-test-push-rehearsal:
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/build-test-push-rehearsal.sh
 
 build-test-push-trivy-scan:
-  extends: .workflow-rehearsal-template
-  stage: image_scan
-  allow_failure: false
+  extends:
+    - .workflow-rehearsal-template
+    - .image-scan-family
+    - .required-rehearsal
+    - .rules-build-scan-and-eks
   needs:
     - job: build-test-push-rehearsal
       artifacts: true
   dependencies:
     - build-test-push-rehearsal
   before_script: []
-  rules:
-    - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
-    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
   variables:
     WORKFLOW_SLUG: build-test-push-trivy-scan
     WORKFLOW_NAME: Build and Test Trivy Image Scan
@@ -456,12 +519,10 @@ build-test-push-trivy-scan:
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/build-test-push-trivy-scan.sh
 
 distroless-build-test-push-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: build
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  extends:
+    - .workflow-rehearsal-template
+    - .build-family
+    - .rules-main-develop-mr
   variables:
     WORKFLOW_SLUG: distroless-build-test-push-workflow
     WORKFLOW_NAME: Build and Test Distroless
@@ -476,21 +537,12 @@ distroless-build-test-push-rehearsal:
       3. Record cosign sign and verify as deferred until the dedicated release workflow migration slice.
 
 int-test-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  allow_failure: false
-  interruptible: false
-  timeout: 10h
-  dependencies:
-    - build-test-push-rehearsal
-  needs:
-    - job: build-test-push-rehearsal
-      artifacts: true
-  rules:
-    - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-10h
+    - .required-rehearsal
+    - .needs-standard-build
+    - .rules-eks-integration-or-main-develop-mr
   variables:
     WORKFLOW_SLUG: int-test-workflow
     WORKFLOW_NAME: Integration Test Workflow
@@ -514,14 +566,10 @@ int-test-workflow-rehearsal:
       junit: rehearsal/int-test-workflow-inttest-junit.xml
 
 namespace-scope-int-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  interruptible: false
-  timeout: 10h
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-10h
+    - .rules-schedule-or-mr-manual
   variables:
     WORKFLOW_SLUG: namespace-scope-int-workflow
     WORKFLOW_NAME: Namespace-scope Operator Integration Test Workflow
@@ -536,14 +584,10 @@ namespace-scope-int-workflow-rehearsal:
       3. Preserve log collection and teardown in the same job flow.
 
 manual-int-test-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  interruptible: false
-  timeout: 10h
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-10h
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: manual-int-test-workflow
     WORKFLOW_NAME: Manual Integration Test Workflow
@@ -559,14 +603,10 @@ manual-int-test-workflow-rehearsal:
       4. Do not push the int tag to DockerHub during rehearsal or production cutover.
 
 nightly-int-test-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  interruptible: false
-  timeout: 10h
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-10h
+    - .rules-schedule-or-mr-manual
   variables:
     WORKFLOW_SLUG: nightly-int-test-workflow
     WORKFLOW_NAME: Nightly Integration Test Workflow
@@ -581,14 +621,10 @@ nightly-int-test-workflow-rehearsal:
       3. Replace DockerHub edge publication with a staging-only validation artifact during rehearsal.
 
 int-test-azure-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  interruptible: false
-  timeout: 10h
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-10h
+    - .rules-main-develop-mr
   variables:
     WORKFLOW_SLUG: int-test-azure-workflow
     WORKFLOW_NAME: Integration Test on Azure Workflow
@@ -604,14 +640,10 @@ int-test-azure-workflow-rehearsal:
       4. Delete the staging AKS cluster at the end of the run.
 
 int-test-gcp-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  interruptible: false
-  timeout: 10h
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-10h
+    - .rules-main-develop-mr
   variables:
     WORKFLOW_SLUG: int-test-gcp-workflow
     WORKFLOW_NAME: Integration Test on GCP Workflow
@@ -627,14 +659,10 @@ int-test-gcp-workflow-rehearsal:
       4. Delete the staging GKE cluster at the end of the run.
 
 distroless-int-test-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  interruptible: false
-  timeout: 10h
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-10h
+    - .rules-main-develop-mr
   variables:
     WORKFLOW_SLUG: distroless-int-test-workflow
     WORKFLOW_NAME: Integration Test Workflow Distroless
@@ -649,22 +677,12 @@ distroless-int-test-workflow-rehearsal:
       3. Preserve teardown and log capture exactly as in GitHub.
 
 helm-test-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  allow_failure: false
-  interruptible: false
-  timeout: 10h
-  dependencies:
-    - build-test-push-rehearsal
-  needs:
-    - job: build-test-push-rehearsal
-      artifacts: true
-  rules:
-    - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-10h
+    - .required-rehearsal
+    - .needs-standard-build
+    - .rules-helm-integration-or-main-develop-mr-or-web
   variables:
     WORKFLOW_SLUG: helm-test-workflow
     WORKFLOW_NAME: Helm Test Workflow
@@ -688,12 +706,10 @@ helm-test-workflow-rehearsal:
       junit: rehearsal/helm-test-workflow-kuttl-junit.xml
 
 arm-ubuntu-build-test-push-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: build
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .build-family
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-ubuntu-build-test-push-workflow
     WORKFLOW_NAME: Arm Ubuntu Smoke Test Workflow
@@ -707,14 +723,10 @@ arm-ubuntu-build-test-push-rehearsal:
       2. Run the associated smoke-test path against staging-only dependencies.
 
 arm-ubuntu-int-test-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  interruptible: false
-  timeout: 5h
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-arm-5h
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-ubuntu-int-test-workflow
     WORKFLOW_NAME: Arm Ubuntu Integration Test Workflow
@@ -728,12 +740,10 @@ arm-ubuntu-int-test-workflow-rehearsal:
       2. Run the ARM Ubuntu integration suite against staging EKS resources.
 
 arm-rhel-build-test-push-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: build
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .build-family
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-rhel-build-test-push-workflow
     WORKFLOW_NAME: ARM RHEL Build and Test Workflow
@@ -747,14 +757,10 @@ arm-rhel-build-test-push-rehearsal:
       2. Validate the smoke-test prerequisites without touching production registries.
 
 arm-rhel-int-test-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  interruptible: false
-  timeout: 5h
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-arm-5h
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-rhel-int-test-workflow
     WORKFLOW_NAME: ARM RHEL Integration Test Workflow
@@ -768,12 +774,10 @@ arm-rhel-int-test-workflow-rehearsal:
       2. Run the ARM RHEL integration path against staging EKS resources.
 
 arm-al2023-build-test-push-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: build
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .build-family
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-al2023-build-test-push-workflow
     WORKFLOW_NAME: Arm AL2023 Smoke Test Workflow
@@ -787,14 +791,10 @@ arm-al2023-build-test-push-rehearsal:
       2. Validate smoke-test prerequisites against staging-only dependencies.
 
 arm-al2023-int-test-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: integration
-  interruptible: false
-  timeout: 5h
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .integration-family-arm-5h
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-al2023-int-test-workflow
     WORKFLOW_NAME: Arm AL2023 Integration Test Workflow
@@ -808,13 +808,10 @@ arm-al2023-int-test-workflow-rehearsal:
       2. Run the ARM AL2023 integration path against staging EKS resources.
 
 pre-release-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: release
-  interruptible: false
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: pre-release-workflow
     WORKFLOW_NAME: Pre Release Workflow
@@ -829,13 +826,10 @@ pre-release-workflow-rehearsal:
       3. Capture the exact file diffs for later production cutover review.
 
 automated-release-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: release
-  interruptible: false
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: automated-release-workflow
     WORKFLOW_NAME: Automated Release Workflow
@@ -850,13 +844,10 @@ automated-release-workflow-rehearsal:
       3. Keep DockerHub and public-registry publication disabled until the dedicated release-phase rehearsal.
 
 bundle-push-post-release-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: release
-  interruptible: false
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: bundle-push-post-release-workflow
     WORKFLOW_NAME: Bundle Push Post Release Workflow
@@ -871,13 +862,10 @@ bundle-push-post-release-rehearsal:
       3. Record the exact bundle push and verification steps for the final runbook.
 
 release-charts-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: release
-  interruptible: false
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .rules-main-or-mr-manual
   variables:
     WORKFLOW_SLUG: release-charts-workflow
     WORKFLOW_NAME: Release Charts Workflow
@@ -892,13 +880,10 @@ release-charts-workflow-rehearsal:
       3. Keep the public GitHub Pages helm repo unchanged during rehearsal.
 
 merge-develop-to-main-workflow-rehearsal:
-  extends: .workflow-rehearsal-template
-  stage: administration
-  interruptible: false
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
+  extends:
+    - .workflow-rehearsal-template
+    - .administration-family
+    - .rules-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: merge-develop-to-main-workflow
     WORKFLOW_NAME: Merge Develop To Main Workflow
@@ -913,10 +898,10 @@ merge-develop-to-main-workflow-rehearsal:
       3. Keep RC image publication confined to staging release repositories.
 
 cla-check-intake-note:
-  extends: .workflow-rehearsal-template
-  stage: administration
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  extends:
+    - .workflow-rehearsal-template
+    - .administration-family
+    - .rules-mr-only
   variables:
     WORKFLOW_SLUG: cla-check
     WORKFLOW_NAME: Agreements Workflow
