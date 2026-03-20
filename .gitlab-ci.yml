@@ -229,6 +229,8 @@ default:
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
       when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "release_train"'
+      when: never
     - when: on_success
 
 .rules-security-standard:
@@ -239,6 +241,8 @@ default:
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
       when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "release_train"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -248,6 +252,8 @@ default:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "release_train"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -297,6 +303,13 @@ default:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "chart_release"'
     - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+
+.rules-release-train-or-web-manual:
+  rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "release_train"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
 
@@ -886,62 +899,66 @@ pre-release-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .release-family
-    - .rules-web-or-mr-manual
+    - .rules-release-train-or-web-manual
   variables:
     WORKFLOW_SLUG: pre-release-workflow
     WORKFLOW_NAME: Pre Release Workflow
     SOURCE_WORKFLOW_FILE: .github/workflows/pre-release-workflow.yml
     WORKFLOW_CLASS: release-preparation
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_PRE_RELEASE
-    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET
+    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET,STAGING_SPLUNK_ENTERPRISE_IMAGE
     WORKFLOW_NOTES: This workflow mutates release artifacts and versioned outputs. Rehearsal execution must target staging-only release destinations.
     WORKFLOW_PLAN: |
       1. Generate pre-release artifacts and version bumps only in a staging branch or disposable project.
       2. Publish artifacts only to staging release destinations.
       3. Capture the exact file diffs for later production cutover review.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/pre-release-workflow-rehearsal.sh
 
 automated-release-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .release-family
-    - .rules-web-or-mr-manual
+    - .rules-release-train-or-web-manual
   variables:
     WORKFLOW_SLUG: automated-release-workflow
     WORKFLOW_NAME: Automated Release Workflow
     SOURCE_WORKFLOW_FILE: .github/workflows/automated-release-workflow.yml
     WORKFLOW_CLASS: release-publication
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_AUTOMATED_RELEASE
-    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_COSIGN_PRIVATE_KEY,STAGING_COSIGN_PUBLIC_KEY,STAGING_COSIGN_PASSWORD,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET
-    WORKFLOW_NOTES: The GitHub workflow publishes RC and release images. Until the later pre-release and release migration is implemented, GitLab rehearsal execution must stay on internal staging release registries only and must not touch DockerHub or public ECR names.
+    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: The GitHub workflow publishes RC and release images. Until the later pre-release and release migration is implemented, GitLab rehearsal execution must stay on internal staging release registries only and must not touch DockerHub or public ECR names. Cosign signing remains deliberately deferred in this dry-run slice.
     WORKFLOW_PLAN: |
       1. Build RC and final release images only in internal staging release registries.
       2. Generate release artifacts against staging release targets.
       3. Keep DockerHub and public-registry publication disabled until the dedicated release-phase rehearsal.
+      4. Record signing inputs, but do not require or perform cosign signing in this dry-run slice.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/automated-release-workflow-rehearsal.sh
 
 bundle-push-post-release-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .release-family
-    - .rules-web-or-mr-manual
+    - .rules-release-train-or-web-manual
   variables:
     WORKFLOW_SLUG: bundle-push-post-release-workflow
     WORKFLOW_NAME: Bundle Push Post Release Workflow
     SOURCE_WORKFLOW_FILE: .github/workflows/bundle-push-post-release.yml
     WORKFLOW_CLASS: release-bundle-publication
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_BUNDLE_PUSH_POST_RELEASE
-    REQUIRED_VARS: STAGING_BUNDLE_REGISTRY,STAGING_BUNDLE_PUSH_TOKEN,STAGING_RELEASE_NOTES_TARGET
-    WORKFLOW_NOTES: The original workflow pushes post-release bundles with Docker credentials. The GitLab rehearsal must use staging bundle registries only.
+    REQUIRED_VARS: STAGING_BUNDLE_REGISTRY,STAGING_RELEASE_NOTES_TARGET
+    WORKFLOW_NOTES: The original workflow pushes post-release bundles with Docker credentials. The GitLab rehearsal must use staging bundle registries only. Real push credentials remain deferred until the live publication slice.
     WORKFLOW_PLAN: |
       1. Build the bundle image against a staging bundle registry only.
       2. Publish bundle metadata to staging destinations only.
       3. Record the exact bundle push and verification steps for the final runbook.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/bundle-push-post-release-rehearsal.sh
 
 release-charts-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .release-family
     - .required-rehearsal
-    - .rules-main-or-mr-manual
+    - .rules-release-train-or-web-manual
   variables:
     WORKFLOW_SLUG: release-charts-workflow
     WORKFLOW_NAME: Release Charts Workflow
@@ -965,7 +982,7 @@ merge-develop-to-main-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .administration-family
-    - .rules-web-or-mr-manual
+    - .rules-release-train-or-web-manual
   variables:
     WORKFLOW_SLUG: merge-develop-to-main-workflow
     WORKFLOW_NAME: Merge Develop To Main Workflow
@@ -978,6 +995,7 @@ merge-develop-to-main-workflow-rehearsal:
       1. Create a GitLab MR from develop to main instead of a GitHub PR.
       2. Validate mergeability and release metadata generation without pushing public artifacts.
       3. Keep RC image publication confined to staging release repositories.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/merge-develop-to-main-workflow-rehearsal.sh
 
 cla-check-intake-note:
   extends:

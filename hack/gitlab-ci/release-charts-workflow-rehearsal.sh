@@ -12,6 +12,7 @@ set -eu
 context_file="rehearsal/${WORKFLOW_SLUG}-runtime-context.txt"
 chart_output_dir="rehearsal/${WORKFLOW_SLUG}-chart-output"
 
+mkdir -p "rehearsal" "${chart_output_dir}"
 : > "${context_file}"
 mkdir -p "${chart_output_dir}"
 
