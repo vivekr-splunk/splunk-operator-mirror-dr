@@ -4,6 +4,12 @@
 
 - Repository history has been imported into GitLab.
 - The initial GitLab CI slice has been added.
+- The active group-rehearsal branch is on the modularized CI stack:
+  - `2de30843` `Refactor GitLab CI into workflow families`
+  - `61fde5ba` `Document GitLab CI architecture and diagrams`
+  - `74841007` `Add release-train docs and runtime profiles`
+  - `f649760b` `Expand executable GitLab workflow scenarios`
+  - `14138ecc` `Fix group rehearsal unit test toolchain`
 - A separate architecture review now exists in:
   - `docs/GitLabWorkflowArchitectureReview.md`
   - use that document to answer:
@@ -62,6 +68,57 @@
     - it does not update `latest`
     - it limits the first runtime proof to `linux/amd64`
     - it runs Trivy against the staging ECR image in GitLab rather than uploading SARIF into GitHub Security
+
+## Present Versus Proven
+
+- Architecturally present in the modularized GitLab graph:
+  - build family
+  - image-scan family
+  - integration family
+  - release family
+  - administration family
+- Selected in the active group MR pipeline `35056309`:
+  - `build-test-push-rehearsal`
+  - `build-test-push-trivy-scan`
+  - `int-test-workflow-rehearsal`
+  - `helm-test-workflow-rehearsal`
+  - `pre-release-workflow-rehearsal`
+  - `automated-release-workflow-rehearsal`
+  - `bundle-push-post-release-rehearsal`
+  - `release-charts-workflow-rehearsal`
+  - `merge-develop-to-main-workflow-rehearsal`
+  - `cla-check-intake-note`
+- Actually executed and proven in group rehearsal:
+  - `format-and-vet`
+  - `bias-language`
+  - `unit-tests`
+  - `kubectl-splunk-tests`
+  - `semgrep-scan`
+  - `fossa-scan`
+  - `build-test-push-rehearsal`
+  - `build-test-push-trivy-scan`
+  - `helm-test-workflow-rehearsal`
+- Live in group rehearsal but not yet closed as fully proven:
+  - `int-test-workflow-rehearsal`
+    - current evidence:
+      - API pipeline `35055608`
+      - build job `205824780`: `success`
+      - Trivy job `205824781`: `success`
+      - integration job `205824782`: `running`
+- Present in the modularized graph but not yet executed end to end:
+  - Azure integration family
+  - GCP integration family
+  - distroless integration family
+  - ARM build and integration families
+  - release family
+  - administration family
+
+Interpretation:
+
+- The modularized GitLab architecture is real in the group project.
+- The main MR pipeline currently proves graph selection and gating.
+- Dedicated API-triggered pipelines currently provide the stronger runtime proof for EKS and Helm.
+- Final production readiness still requires every authoritative family to move from "present" to "executed and validated."
 
 ## Not Yet Migrated
 
