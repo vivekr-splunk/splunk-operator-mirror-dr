@@ -16,6 +16,22 @@ fi
 PRIVATE_SPLUNK_OPERATOR_IMAGE="$1"
 PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$2"
 
+wait_for_enterprise_crds() {
+  for crd in \
+    clustermanagers.enterprise.splunk.com \
+    clustermasters.enterprise.splunk.com \
+    indexerclusters.enterprise.splunk.com \
+    licensemanagers.enterprise.splunk.com \
+    licensemasters.enterprise.splunk.com \
+    monitoringconsoles.enterprise.splunk.com \
+    searchheadclusters.enterprise.splunk.com \
+    standalones.enterprise.splunk.com
+  do
+    echo "Waiting for CRD ${crd} to become Established..."
+    kubectl wait --for=condition=Established --timeout=300s "crd/${crd}"
+  done
+}
+
 if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then
   echo "Installing Splunk Operator using Helm charts"
   helm uninstall splunk-operator -n splunk-operator
@@ -37,6 +53,11 @@ elif [  "${CLUSTER_WIDE}" != "true" ]; then
   bin/kustomize build config/crd | kubectl create -f -
 else
   echo "Installing enterprise operator from ${PRIVATE_SPLUNK_OPERATOR_IMAGE} using enterprise image from ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}..."
+  echo "Installing enterprise CRDs..."
+  make kustomize
+  make uninstall
+  make install
+  wait_for_enterprise_crds
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com" WATCH_NAMESPACE="" ENVIRONMENT=debug
 fi
 
