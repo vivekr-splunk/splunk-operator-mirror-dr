@@ -119,6 +119,11 @@ Interpretation:
 - The main MR pipeline currently proves graph selection and gating.
 - Dedicated API-triggered pipelines currently provide the stronger runtime proof for EKS and Helm.
 - Final production readiness still requires every authoritative family to move from "present" to "executed and validated."
+- Current machine-generated readiness summary for the group project:
+  - runnable now:
+    - `8`
+  - design-only:
+    - `15`
 
 ## Not Yet Migrated
 
