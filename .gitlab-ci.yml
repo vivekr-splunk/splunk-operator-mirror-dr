@@ -326,6 +326,12 @@ default:
 
 .rules-web-or-mr-manual:
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+
+.rules-variant-runtime-or-web-or-mr-manual:
+  rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "variant_runtime"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -851,7 +857,7 @@ arm-ubuntu-build-test-push-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .build-family
-    - .rules-web-or-mr-manual
+    - .rules-variant-runtime-or-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-ubuntu-build-test-push-workflow
     WORKFLOW_NAME: Arm Ubuntu Smoke Test Workflow
@@ -875,7 +881,7 @@ arm-ubuntu-int-test-workflow-rehearsal:
     - .integration-family-arm-5h
     - .required-rehearsal
     - .needs-arm-ubuntu-build
-    - .rules-web-or-mr-manual
+    - .rules-variant-runtime-or-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-ubuntu-int-test-workflow
     WORKFLOW_NAME: Arm Ubuntu Integration Test Workflow
@@ -902,7 +908,7 @@ arm-rhel-build-test-push-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .build-family
-    - .rules-web-or-mr-manual
+    - .rules-variant-runtime-or-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-rhel-build-test-push-workflow
     WORKFLOW_NAME: ARM RHEL Build and Test Workflow
@@ -926,7 +932,7 @@ arm-rhel-int-test-workflow-rehearsal:
     - .integration-family-arm-5h
     - .required-rehearsal
     - .needs-arm-rhel-build
-    - .rules-web-or-mr-manual
+    - .rules-variant-runtime-or-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-rhel-int-test-workflow
     WORKFLOW_NAME: ARM RHEL Integration Test Workflow
@@ -953,7 +959,7 @@ arm-al2023-build-test-push-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .build-family
-    - .rules-web-or-mr-manual
+    - .rules-variant-runtime-or-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-al2023-build-test-push-workflow
     WORKFLOW_NAME: Arm AL2023 Smoke Test Workflow
@@ -977,7 +983,7 @@ arm-al2023-int-test-workflow-rehearsal:
     - .integration-family-arm-5h
     - .required-rehearsal
     - .needs-arm-al2023-build
-    - .rules-web-or-mr-manual
+    - .rules-variant-runtime-or-web-or-mr-manual
   variables:
     WORKFLOW_SLUG: arm-al2023-int-test-workflow
     WORKFLOW_NAME: Arm AL2023 Integration Test Workflow
