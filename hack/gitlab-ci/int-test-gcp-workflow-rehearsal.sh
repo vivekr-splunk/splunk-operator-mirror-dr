@@ -3,9 +3,9 @@ set -eu
 
 # Runtime contract
 # - Purpose: execute the GCP integration workflow in a staging-only GitLab rehearsal.
-# - Inputs: staging GCP auth, staging Artifact Registry, staging project/zone, and staging enterprise image.
+# - Inputs: staging GCP auth, staging Artifact Registry, staging project/zone, and staging enterprise image source.
 # - Outputs: runtime context, build log, cluster log, run log, copied pod logs, and JUnit output under rehearsal/.
-# - Guardrails: no DockerHub/public release mutation, ephemeral GKE cluster, and explicit cleanup on exit.
+# - Guardrails: no public release mutation, ephemeral GKE cluster, and explicit cleanup on exit.
 
 . "${CI_PROJECT_DIR}/hack/gitlab-ci/lib/cloud-rehearsal-common.sh"
 
@@ -69,7 +69,6 @@ require_envs \
   STAGING_GCP_ARTIFACT_REGISTRY \
   STAGING_GCP_PROJECT_ID \
   STAGING_SPLUNK_ENTERPRISE_IMAGE
-ensure_internal_image_ref "${STAGING_SPLUNK_ENTERPRISE_IMAGE}" "GCP enterprise image"
 
 gcp_auth_mode="service-account-key"
 if gcp_oidc_ready; then
@@ -89,7 +88,7 @@ fi
 
 operator_registry="${STAGING_GCP_ARTIFACT_REGISTRY}"
 operator_image="${operator_registry}/splunk/splunk-operator:${CI_COMMIT_SHA}"
-enterprise_image="${STAGING_SPLUNK_ENTERPRISE_IMAGE}"
+enterprise_source_image="${STAGING_SPLUNK_ENTERPRISE_IMAGE}"
 cluster_name="gke-${CI_JOB_ID}"
 test_focus="${STAGING_GCP_TEST_FOCUS:-s1_gcp_sanity}"
 test_to_skip="${STAGING_GCP_TEST_TO_SKIP:-^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$}"
@@ -113,7 +112,7 @@ export GCP_ARTIFACT_REGISTRY="${STAGING_GCP_ARTIFACT_REGISTRY}"
 export GCP_CONTAINER_REGISTRY_LOGIN_SERVER="${STAGING_GCP_ARTIFACT_REGISTRY}"
 export PRIVATE_REGISTRY="${STAGING_GCP_ARTIFACT_REGISTRY}"
 export SPLUNK_OPERATOR_IMAGE="${operator_image}"
-export SPLUNK_ENTERPRISE_IMAGE="${enterprise_image}"
+export SPLUNK_ENTERPRISE_IMAGE="${enterprise_source_image}"
 export TEST_FOCUS="${test_focus}"
 export TEST_TO_SKIP="${test_to_skip}"
 export TEST_TIMEOUT="${test_timeout}"
@@ -140,6 +139,12 @@ gcloud config set project "${GCP_PROJECT_ID}" >> "${run_log}" 2>&1
 gcloud auth configure-docker "$(printf '%s' "${GCP_ARTIFACT_REGISTRY}" | cut -d/ -f1)" --quiet >> "${run_log}" 2>&1
 log_step "gcp:auth:complete" | tee -a "${run_log}" >/dev/null
 
+log_step "gcp:registry-enterprise-image:start" | tee -a "${run_log}" >/dev/null
+PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(stage_enterprise_image_in_private_registry)"
+export SPLUNK_ENTERPRISE_IMAGE="${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+append_context "${context_file}" "private_splunk_enterprise_image" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+log_step "gcp:registry-enterprise-image:complete ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" | tee -a "${run_log}" >/dev/null
+
 append_context "${context_file}" "workflow" "${WORKFLOW_SLUG}"
 append_context "${context_file}" "cluster_mode" "${cluster_mode}"
 append_context "${context_file}" "cluster_provider" "${CLUSTER_PROVIDER}"
@@ -149,7 +154,7 @@ append_context "${context_file}" "cluster_nodes" "${CLUSTER_NODES}"
 append_context "${context_file}" "cluster_wide" "${CLUSTER_WIDE}"
 append_context "${context_file}" "deployment_type" "${DEPLOYMENT_TYPE}"
 append_context "${context_file}" "operator_image" "${operator_image}"
-append_context "${context_file}" "enterprise_image" "${enterprise_image}"
+append_context "${context_file}" "enterprise_source_image" "${enterprise_source_image}"
 append_context "${context_file}" "gcp_project_id" "${GCP_PROJECT_ID}"
 append_context "${context_file}" "gcp_region" "${GCP_REGION}"
 append_context "${context_file}" "gcp_zone" "${GCP_ZONE}"
@@ -173,11 +178,11 @@ kubectl get nodes -o wide 2>&1 | tee -a "${cluster_log}"
 kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 
 log_step "gcp:deploy-operator:start" | tee -a "${run_log}" >/dev/null
-bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${enterprise_image}" >> "${run_log}" 2>&1
+bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
 log_step "gcp:deploy-operator:complete" | tee -a "${run_log}" >/dev/null
 
 log_step "gcp:trigger-tests:start focus=${TEST_FOCUS}" | tee -a "${run_log}" >/dev/null
-bash "${CI_PROJECT_DIR}/test/trigger-tests.sh" "${operator_image}" "${enterprise_image}" >> "${run_log}" 2>&1
+bash "${CI_PROJECT_DIR}/test/trigger-tests.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
 log_step "gcp:trigger-tests:complete" | tee -a "${run_log}" >/dev/null
 
 capture_test_logs "${CI_PROJECT_DIR}/test" "${pod_log_root}"

@@ -180,6 +180,10 @@ copy_if_exists() {
   return 1
 }
 
+stage_enterprise_image_in_private_registry() {
+  bash "${CI_PROJECT_DIR}/test/get-private-registry-enterprise.sh" | tail -1
+}
+
 sanitize_slug() {
   printf '%s' "$1" \
     | tr '[:upper:]' '[:lower:]' \

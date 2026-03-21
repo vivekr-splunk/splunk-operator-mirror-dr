@@ -3,9 +3,9 @@ set -eu
 
 # Runtime contract
 # - Purpose: execute the Azure integration workflow in a staging-only GitLab rehearsal.
-# - Inputs: staging Azure auth, staging ACR, staging resource group, staging storage, and staging enterprise image.
+# - Inputs: staging Azure auth, staging ACR, staging resource group, staging storage, and staging enterprise image source.
 # - Outputs: runtime context, build log, cluster log, run log, copied pod logs, and JUnit output under rehearsal/.
-# - Guardrails: no DockerHub/public release mutation, ephemeral AKS cluster, and explicit cleanup on exit.
+# - Guardrails: no public release mutation, ephemeral AKS cluster, and explicit cleanup on exit.
 
 . "${CI_PROJECT_DIR}/hack/gitlab-ci/lib/cloud-rehearsal-common.sh"
 
@@ -68,7 +68,6 @@ require_envs \
   STAGING_AZURE_TEST_CONTAINER \
   STAGING_AZURE_INDEXES_CONTAINER \
   STAGING_SPLUNK_ENTERPRISE_IMAGE
-ensure_internal_image_ref "${STAGING_SPLUNK_ENTERPRISE_IMAGE}" "Azure enterprise image"
 
 azure_client_id=""
 azure_client_secret=""
@@ -107,7 +106,7 @@ fi
 
 operator_registry="${STAGING_AZURE_ACR_LOGIN_SERVER}"
 operator_image="${operator_registry}/splunk/splunk-operator:${CI_COMMIT_SHA}"
-enterprise_image="${STAGING_SPLUNK_ENTERPRISE_IMAGE}"
+enterprise_source_image="${STAGING_SPLUNK_ENTERPRISE_IMAGE}"
 cluster_name="az${CI_JOB_ID}"
 test_focus="${STAGING_AZURE_TEST_FOCUS:-azure_sanity}"
 test_to_skip="${STAGING_AZURE_TEST_TO_SKIP:-^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$}"
@@ -133,7 +132,7 @@ export AZURE_MANAGED_ID_ENABLED="${STAGING_AZURE_MANAGED_ID_ENABLED:-false}"
 export AZURE_ENTERPRISE_LICENSE_PATH="${STAGING_AZURE_ENTERPRISE_LICENSE_PATH:-test_licenses}"
 export PRIVATE_REGISTRY="${STAGING_AZURE_ACR_LOGIN_SERVER}"
 export SPLUNK_OPERATOR_IMAGE="${operator_image}"
-export SPLUNK_ENTERPRISE_IMAGE="${enterprise_image}"
+export SPLUNK_ENTERPRISE_IMAGE="${enterprise_source_image}"
 export TEST_FOCUS="${test_focus}"
 export TEST_TO_SKIP="${test_to_skip}"
 export TEST_TIMEOUT="${test_timeout}"
@@ -155,7 +154,7 @@ append_context "${context_file}" "cluster_nodes" "${CLUSTER_NODES}"
 append_context "${context_file}" "cluster_wide" "${CLUSTER_WIDE}"
 append_context "${context_file}" "deployment_type" "${DEPLOYMENT_TYPE}"
 append_context "${context_file}" "operator_image" "${operator_image}"
-append_context "${context_file}" "enterprise_image" "${enterprise_image}"
+append_context "${context_file}" "enterprise_source_image" "${enterprise_source_image}"
 append_context "${context_file}" "azure_resource_group" "${AZURE_RESOURCE_GROUP}"
 append_context "${context_file}" "azure_container_registry" "${AZURE_CONTAINER_REGISTRY}"
 append_context "${context_file}" "azure_region" "${AZURE_REGION}"
@@ -191,6 +190,12 @@ else
 fi
 log_step "azure:registry-login:complete" | tee -a "${run_log}" >/dev/null
 
+log_step "azure:registry-enterprise-image:start" | tee -a "${run_log}" >/dev/null
+PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(stage_enterprise_image_in_private_registry)"
+export SPLUNK_ENTERPRISE_IMAGE="${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+append_context "${context_file}" "private_splunk_enterprise_image" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
+log_step "azure:registry-enterprise-image:complete ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" | tee -a "${run_log}" >/dev/null
+
 log_step "azure:build:start image=${operator_image}" | tee -a "${build_log}" >/dev/null
 make docker-buildx IMG="${operator_image}" >> "${build_log}" 2>&1
 log_step "azure:build:complete" | tee -a "${build_log}" >/dev/null
@@ -206,11 +211,11 @@ kubectl get nodes -o wide 2>&1 | tee -a "${cluster_log}"
 kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 
 log_step "azure:deploy-operator:start" | tee -a "${run_log}" >/dev/null
-bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${enterprise_image}" >> "${run_log}" 2>&1
+bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
 log_step "azure:deploy-operator:complete" | tee -a "${run_log}" >/dev/null
 
 log_step "azure:trigger-tests:start focus=${TEST_FOCUS}" | tee -a "${run_log}" >/dev/null
-bash "${CI_PROJECT_DIR}/test/trigger-tests.sh" "${operator_image}" "${enterprise_image}" >> "${run_log}" 2>&1
+bash "${CI_PROJECT_DIR}/test/trigger-tests.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1
 log_step "azure:trigger-tests:complete" | tee -a "${run_log}" >/dev/null
 
 capture_test_logs "${CI_PROJECT_DIR}/test" "${pod_log_dir}"

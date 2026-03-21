@@ -366,7 +366,7 @@ spec:
                     fieldRef:
                       fieldPath: metadata.annotations['olm.targetNamespaces']
                 - name: RELATED_IMAGE_SPLUNK_ENTERPRISE
-                  value: docker.io/splunk/splunk:10.0.0
+                  value: docker.io/splunk/splunk:10.2.0
                 - name: OPERATOR_NAME
                   value: splunk-operator
                 - name: SPLUNK_GENERAL_TERMS
@@ -488,7 +488,7 @@ spec:
     name: Splunk Inc.
     url: www.splunk.com
   relatedImages:
-  - image: docker.io/splunk/splunk:10.0.0
+  - image: docker.io/splunk/splunk:10.2.0
     name: splunk-enterprise
   replaces: splunk-operator.v2.8.1
   version: 3.0.0
