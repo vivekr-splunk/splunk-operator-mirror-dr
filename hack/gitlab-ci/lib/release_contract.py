@@ -137,9 +137,11 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
         cycle_contract.get("QUALIFICATION_PROFILES"),
         default="smoke,upgrade,latest3,helm,arch-matrix",
     )
-    psr_base_version = first_non_empty(
-        env.get("STAGING_PSR_BASE_VERSION"),
-        default=operator_version,
+    psr_base_version = normalize_psr_target_version(
+        first_non_empty(
+            env.get("STAGING_PSR_BASE_VERSION"),
+            default=operator_version,
+        )
     )
     psr_target_version = normalize_psr_target_version(
         first_non_empty(
