@@ -1258,7 +1258,7 @@ qualification-report-rehearsal:
     - job: release-charts-workflow-rehearsal
       artifacts: true
       optional: true
-    - job: merge-develop-to-main-workflow-rehearsal
+    - job: release-branch-to-main-rehearsal
       artifacts: true
       optional: true
   dependencies:
@@ -1271,7 +1271,7 @@ qualification-report-rehearsal:
     - automated-release-workflow-rehearsal
     - bundle-push-post-release-rehearsal
     - release-charts-workflow-rehearsal
-    - merge-develop-to-main-workflow-rehearsal
+    - release-branch-to-main-rehearsal
   script:
     - python3 hack/gitlab-ci/qualification-report-rehearsal.py
   artifacts:
