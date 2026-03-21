@@ -56,6 +56,23 @@ def infer_enterprise_version(image_ref: str, env: dict[str, str]) -> str:
     return "unknown"
 
 
+def normalize_psr_target_version(value: str) -> str:
+    candidate = value.strip()
+    if not candidate:
+        return "develop"
+    if candidate == "develop":
+        return candidate
+
+    parts = candidate.split(".", 2)
+    if len(parts) < 3:
+        return candidate
+    major, minor, patch = parts
+    patch_head = patch.split("-", 1)[0].split("+", 1)[0]
+    if major.isdigit() and minor.isdigit() and patch_head.isdigit():
+        return f"{major}.{minor}"
+    return candidate
+
+
 @dataclass
 class ReleaseContext:
     manifest: dict[str, object]
@@ -119,6 +136,23 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
         env.get("SOK_QUALIFICATION_PROFILES"),
         cycle_contract.get("QUALIFICATION_PROFILES"),
         default="smoke,upgrade,latest3,helm,arch-matrix",
+    )
+    psr_base_version = first_non_empty(
+        env.get("STAGING_PSR_BASE_VERSION"),
+        default=operator_version,
+    )
+    psr_target_version = normalize_psr_target_version(
+        first_non_empty(
+            env.get("STAGING_PSR_TARGET_VERSION"),
+            env.get("STAGING_RELEASE_VERSION"),
+            env.get("PRODUCT_RELEASE_VERSION"),
+            cycle_contract.get("PRODUCT_RELEASE_VERSION"),
+            default=operator_version,
+        )
+    )
+    psr_trigger_test_type = first_non_empty(
+        env.get("STAGING_PSR_TRIGGER_TEST_TYPE"),
+        default="all",
     )
     manifest = {
         "schema_version": "v1alpha1",
@@ -231,6 +265,9 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
             "chart_repository": first_non_empty(env.get("STAGING_CHART_RELEASE_REPOSITORY"), default="unset"),
             "certification_registry": first_non_empty(env.get("STAGING_CERTIFICATION_REGISTRY"), default="unset"),
             "psr_project": first_non_empty(env.get("STAGING_PSR_PROJECT_PATH"), default="psr/k8s-operator"),
+            "psr_base_version": psr_base_version,
+            "psr_target_version": psr_target_version,
+            "psr_trigger_test_type": psr_trigger_test_type,
             "operatorhub_repo": first_non_empty(
                 env.get("STAGING_OPERATORHUB_REPO"), default="k8s-operatorhub/community-operators"
             ),
@@ -279,6 +316,9 @@ def write_dotenv(path: Path, manifest: dict[str, object]) -> None:
         f"SOK_CHART_REPOSITORY={release['chart_repository']}",
         f"SOK_CERTIFICATION_REGISTRY={release['certification_registry']}",
         f"SOK_PSR_PROJECT={release['psr_project']}",
+        f"SOK_PSR_BASE_VERSION={release['psr_base_version']}",
+        f"SOK_PSR_TARGET_VERSION={release['psr_target_version']}",
+        f"SOK_PSR_TRIGGER_TEST_TYPE={release['psr_trigger_test_type']}",
         f"SOK_OPERATORHUB_REPO={release['operatorhub_repo']}",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

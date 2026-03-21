@@ -421,6 +421,8 @@ release-manifest-resolve-rehearsal:
     expire_in: 30 days
     paths:
       - rehearsal/release-controller/
+    reports:
+      dotenv: rehearsal/release-controller/release-cycle.env
 
 lane-select-rehearsal:
   extends:
@@ -1159,6 +1161,30 @@ psr-release-qualification-rehearsal:
       2. Run the matrix against the release candidate version and target Splunk enterprise image.
       3. Collect PSR pipeline URLs and verdicts into the release qualification report before GA promotion.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/psr-release-qualification-rehearsal.sh
+
+psr-release-qualification-dispatch:
+  stage: release
+  needs:
+    - job: release-manifest-resolve-rehearsal
+      artifacts: true
+    - job: psr-release-qualification-rehearsal
+      artifacts: true
+  rules:
+    - if: '$STAGING_EXECUTE_PSR_RELEASE != "true"'
+      when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "release_train"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  variables:
+    TEST_TYPE: $SOK_PSR_TRIGGER_TEST_TYPE
+    BASE_VERSION: $SOK_PSR_BASE_VERSION
+    TARGET_VERSION: $SOK_PSR_TARGET_VERSION
+    IMAGE_SPLUNK_ENTERPRISE: $SOK_ENTERPRISE_IMAGE
+  trigger:
+    project: psr/k8s-operator
+    branch: main
+    strategy: depend
+    forward:
+      pipeline_variables: true
 
 bundle-push-post-release-rehearsal:
   extends:

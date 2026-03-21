@@ -20,6 +20,7 @@ def main() -> int:
             "pre-release-workflow-rehearsal",
             "automated-release-workflow-rehearsal",
             "psr-release-qualification-rehearsal",
+            "psr-release-qualification-dispatch",
             "release-charts-workflow-rehearsal",
             "bundle-push-post-release-rehearsal",
             "preflight-certification-rehearsal",
