@@ -9,8 +9,16 @@ set -eu
 
 . "${CI_PROJECT_DIR}/hack/gitlab-ci/lib/rehearsal-common.sh"
 
-export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
-export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
+aws_oidc_token_file="$(mktemp /tmp/${WORKFLOW_SLUG}-aws-oidc.XXXXXX.jwt)"
+trap 'rm -f "${aws_oidc_token_file}"' EXIT INT TERM
+
+aws_auth_mode="static-key"
+if aws_oidc_ready; then
+  aws_auth_mode="oidc"
+else
+  export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
+  export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
+fi
 context_file="rehearsal/${WORKFLOW_SLUG}-runtime-context.txt"
 : > "${context_file}"
 TRIVY_RELEASE="${STAGING_TRIVY_RELEASE:-v0.69.3}"
@@ -69,11 +77,15 @@ if [ -z "${AWS_DEFAULT_REGION}" ]; then
 fi
 
 export AWS_REGION="${AWS_DEFAULT_REGION}"
+if [ "${aws_auth_mode}" = "oidc" ]; then
+  aws_prepare_oidc_env "${aws_oidc_token_file}"
+fi
 export ECR_PASSWORD="$(aws ecr get-login-password --region "${AWS_DEFAULT_REGION}")"
 
 append_context "${context_file}" "input_artifact" "rehearsal/build-test-push-workflow-image-ref.txt"
 append_context "${context_file}" "ecr_registry_present" "true"
 append_context "${context_file}" "ecr_region_source" "${RESOLVED_ECR_REGION_SOURCE}"
+append_context "${context_file}" "aws_auth_mode" "${aws_auth_mode}"
 append_context "${context_file}" "trivy_release_selector" "${TRIVY_RELEASE}"
 append_context "${context_file}" "trivy_tag" "${TRIVY_TAG}"
 append_context "${context_file}" "trivy_asset_url" "${TRIVY_ASSET_URL}"

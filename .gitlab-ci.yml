@@ -194,19 +194,31 @@ default:
 
 .build-family:
   stage: build
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: $GITLAB_OIDC_AUDIENCE
 
 .image-scan-family:
   stage: image_scan
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: $GITLAB_OIDC_AUDIENCE
 
 .integration-family-10h:
   stage: integration
   interruptible: false
   timeout: 10h
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: $GITLAB_OIDC_AUDIENCE
 
 .integration-family-arm-5h:
   stage: integration
   interruptible: false
   timeout: 5h
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: $GITLAB_OIDC_AUDIENCE
 
 .release-family:
   stage: release

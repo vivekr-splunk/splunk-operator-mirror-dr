@@ -9,8 +9,16 @@ set -eu
 
 . "${CI_PROJECT_DIR}/hack/gitlab-ci/lib/rehearsal-common.sh"
 
-export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
-export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
+aws_oidc_token_file="$(mktemp /tmp/${WORKFLOW_SLUG}-aws-oidc.XXXXXX.jwt)"
+trap 'rm -f "${aws_oidc_token_file}"' EXIT INT TERM
+
+aws_auth_mode="static-key"
+if aws_oidc_ready; then
+  aws_auth_mode="oidc"
+else
+  export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
+  export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
+fi
 export BASE_IMAGE="registry.access.redhat.com/ubi8/ubi-minimal"
 export BASE_IMAGE_VERSION="8.10-1755105495"
 context_file="rehearsal/${WORKFLOW_SLUG}-runtime-context.txt"
@@ -37,12 +45,16 @@ export REPOSITORY_NAME="${IMAGE_REPOSITORY#${ECR_REGISTRY}/}"
 append_context "${context_file}" "ecr_registry_present" "true"
 append_context "${context_file}" "image_repository_mode" "${RESOLVED_IMAGE_REPOSITORY_MODE}"
 append_context "${context_file}" "ecr_region_source" "${RESOLVED_ECR_REGION_SOURCE}"
+append_context "${context_file}" "aws_auth_mode" "${aws_auth_mode}"
 append_context "${context_file}" "image_tag" "${IMAGE_TAG}"
 
 printf '%s\n' "${IMAGE_REF}" > "rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
 
 echo "Using staging ECR host derived from STAGING_ECR_REPOSITORY"
 docker version
+if [ "${aws_auth_mode}" = "oidc" ]; then
+  aws_prepare_oidc_env "${aws_oidc_token_file}"
+fi
 aws ecr get-login-password --region "${ECR_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 DOCKER_BUILDKIT=1 docker build "${CI_PROJECT_DIR}" \
   -f "${CI_PROJECT_DIR}/Dockerfile" \

@@ -167,6 +167,10 @@
       - `205852801` `release-charts-workflow-rehearsal`: `success`
       - `205852802` `release-branch-to-main-rehearsal`: `success`
 - Present in the modularized graph but not yet executed end to end:
+  - AWS-authenticated build and integration families
+    - build, Trivy, EKS, and Helm runtime scripts are now OIDC-capable in the product repo
+    - they prefer GitLab `id_tokens` plus `AWS_ROLE_ARN` and fall back to staging static AWS keys
+    - first live OIDC proof is blocked outside the repo because AWS IAM requires a non-redirecting issuer URL and `https://cd.splunkdev.com` currently redirects to sign-in at the root URL
   - Azure integration family
     - concrete runtime script now exists
     - current preferred rehearsal contract is GitLab OIDC plus project-scoped Azure client variables, with protected `STAGING_AKS_KUBECONFIG` for existing-cluster mode

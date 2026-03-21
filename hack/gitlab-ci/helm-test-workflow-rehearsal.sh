@@ -33,8 +33,14 @@ ensure_ci_bin_path "${ci_bin_dir}"
 
 require_file "rehearsal/build-test-push-workflow-image-ref.txt" "standard build image reference"
 
-export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
-export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
+aws_oidc_token_file="$(mktemp /tmp/${WORKFLOW_SLUG}-aws-oidc.XXXXXX.jwt)"
+aws_auth_mode="static-key"
+if aws_oidc_ready; then
+  aws_auth_mode="oidc"
+else
+  export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
+  export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
+fi
 
 IMAGE_REF="$(cat rehearsal/build-test-push-workflow-image-ref.txt)"
 IMAGE_REPOSITORY="${IMAGE_REF%:*}"
@@ -87,6 +93,7 @@ append_context "${context_file}" "helm_test_profile" "${RESOLVED_HELM_TEST_PROFI
 append_context "${context_file}" "helm_test_dirs" "${RESOLVED_HELM_TEST_DIRS}"
 append_context "${context_file}" "helm_test_timeout" "${RESOLVED_HELM_TEST_TIMEOUT}"
 append_context "${context_file}" "helm_test_parallel" "${RESOLVED_HELM_TEST_PARALLEL}"
+append_context "${context_file}" "aws_auth_mode" "${aws_auth_mode}"
 append_context "${context_file}" "helm_version" "${HELM_VERSION}"
 append_context "${context_file}" "kuttl_version" "${KUTTL_VERSION}"
 append_context "${context_file}" "job_timeout" "${CI_JOB_TIMEOUT:-unknown}"
@@ -111,6 +118,8 @@ cleanup_and_exit() {
   log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
   make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
   log_step "cleanup:complete cleanup_rc=${cleanup_rc}" | tee -a "${cleanup_log}" >/dev/null
+
+  rm -f "${aws_oidc_token_file}"
 
   if [ "${rc}" -ne 0 ]; then
     exit "${rc}"
@@ -145,6 +154,9 @@ aws --version
 log_step "versions:complete"
 
 log_step "registry:ecr-login ${ECR_REGISTRY}"
+if [ "${aws_auth_mode}" = "oidc" ]; then
+  aws_prepare_oidc_env "${aws_oidc_token_file}"
+fi
 aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 log_step "registry:ecr-login:complete"
 

@@ -42,6 +42,31 @@ require_file() {
   fi
 }
 
+env_present() {
+  env_name="$1"
+  env_value="$(printenv "${env_name}" 2>/dev/null || true)"
+  [ -n "${env_value}" ]
+}
+
+aws_oidc_ready() {
+  env_present GITLAB_OIDC_TOKEN && env_present AWS_ROLE_ARN
+}
+
+aws_prepare_oidc_env() {
+  token_file="$1"
+
+  if [ -z "${GITLAB_OIDC_TOKEN:-}" ] || [ -z "${AWS_ROLE_ARN:-}" ]; then
+    echo "GitLab AWS OIDC requires GITLAB_OIDC_TOKEN and AWS_ROLE_ARN" >&2
+    return 1
+  fi
+
+  printf '%s' "${GITLAB_OIDC_TOKEN}" > "${token_file}"
+  export AWS_WEB_IDENTITY_TOKEN_FILE="${token_file}"
+  export AWS_ROLE_ARN="${AWS_ROLE_ARN}"
+  export AWS_ROLE_SESSION_NAME="${AWS_ROLE_SESSION_NAME:-gitlab-${CI_JOB_ID:-session}}"
+  export AWS_STS_REGIONAL_ENDPOINTS=regional
+}
+
 resolve_staging_image_repository() {
   staging_target="$1"
   default_repo_path="$2"
