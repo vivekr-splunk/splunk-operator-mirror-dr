@@ -308,7 +308,9 @@ Manual execution is not the desired steady state for:
 - automatic baseline selection
 - compatibility-matrix publication
 - blocker bucketing and rerun automation
-- auto-created work items and status updates for Jira, Confluence, and Slack
+- auto-created work items and status updates for Jira plus the GitLab-native status surfaces:
+  - GitLab Pages for live cycle detail
+  - org-managed `gitlab-slack` for transition alerts
 - automatic escalation from qualification failure to product-release lane
 - official Helm publication away from GitHub Pages
 - executable PSR downstream triggers and verdict ingestion

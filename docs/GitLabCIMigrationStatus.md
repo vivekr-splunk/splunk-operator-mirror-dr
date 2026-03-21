@@ -37,7 +37,7 @@
   - `pages` is now the standard live-status publication path for release and qualification cycles:
     - it publishes a small GitLab Pages dashboard plus raw controller JSON and Markdown
     - Confluence is intentionally kept out of the runtime status loop
-    - Slack remains informational and points people back to GitLab-native status
+    - Slack alerts should come from the org-managed `gitlab-slack` service and point people back to GitLab-native status
 - Release and qualification controller documentation now exists in:
   - `docs/GitLabReleaseQualificationController.md`
   - use that document to understand the checked-in cycle manifest, lane selection, PSR verdict capture, qualification artifacts, and compatibility publication plan
@@ -199,7 +199,7 @@
 - first live proof for the new GitHub intake automation validation job
 - first live proof for the read-only GitHub mirror health check job
 - first live proof for the rollback rehearsal packet job
-- first live proof for the Slack notification job
+- first live proof for `gitlab-slack` onboarding on the `sok/splunk-operator` project
 - first live proof for the GitLab Pages status dashboard job
 - Executed but still under stabilization:
   - namespace-scope/manual/nightly EKS variants
@@ -237,7 +237,7 @@ Interpretation:
 - executable GitHub issue and PR intake automation replacement still needs first end-to-end proof from the mirrored GitHub surface
 - GitHub mirror health still needs a disposable mirror target before it can count as a full rehearsal
 - rollback drill still needs a timed live execution window beyond the generated rehearsal packet
-- Slack notification delivery still needs a dedicated `STAGING_SLACK_TOKEN` before the shared notification pattern can send to the configured channel
+- `gitlab-slack` service onboarding still needs to be completed for `sok/splunk-operator` so standard GitLab events can flow to `sok-gitlab-ci-alerts`
 
 ## Notes
 
@@ -336,18 +336,12 @@ Interpretation:
     - `rollback-rehearsal`
   - the intake validation and rollback packet jobs are enabled in the group rehearsal project
   - the mirror health-check job remains disabled until a deliberate mirror target is loaded
-- Slack notification is now modeled explicitly in the product repo using the same internal pattern shape already used by shared CI templates:
-  - the configured rehearsal channel is `sok-gitlab-ci-alerts`
-  - the notifier is wired as a non-authoritative final-stage job
-  - it now reads the release-controller outputs so the message includes:
-    - cycle id
-    - selected lane
-    - qualification disposition
-    - next action
-  - the current rehearsal project now carries the non-secret channel variables:
-    - `STAGING_SLACK_CHANNEL=sok-gitlab-ci-alerts`
-    - `STAGING_SLACK_SCHEDULE_CHANNEL=sok-gitlab-ci-alerts`
-  - live delivery remains disabled until a dedicated `STAGING_SLACK_TOKEN` is loaded
+- Slack alerting should use the org-managed `gitlab-slack` service instead of repo-local notification code:
+  - standard GitLab events remain the notification source
+  - the configured target channel is `sok-gitlab-ci-alerts`
+  - `GitLab Pages` remains the authoritative live status surface for cycle detail
+  - `gitlab-slack` should be configured through its service UI/API flow rather than by loading a bespoke Slack bot token into this repo
+  - the current runtime loop therefore keeps only the `pages` job in-repo and treats Slack onboarding as an external integration step
 - GitLab Pages is now the standard live-status surface for release and qualification:
   - the `pages` job runs in the final notification stage
   - it publishes:

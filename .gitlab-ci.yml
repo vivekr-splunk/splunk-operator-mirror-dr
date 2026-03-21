@@ -1428,34 +1428,6 @@ rollback-rehearsal:
       3. Keep the rehearsal evidence-only unless a dedicated rollback execution window is approved.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/rollback-rehearsal.sh
 
-slack-notify-rehearsal:
-  extends:
-    - .workflow-rehearsal-template
-    - .notification-family
-    - .python-controller-bootstrap
-    - .rules-qualification-or-release-train-or-web-manual
-  when: always
-  needs:
-    - job: compatibility-publish-rehearsal
-      artifacts: true
-      optional: true
-  dependencies:
-    - compatibility-publish-rehearsal
-  variables:
-    WORKFLOW_SLUG: slack-notify
-    WORKFLOW_NAME: Slack Notification Rehearsal
-    SOURCE_WORKFLOW_FILE: security/ci-cd-templates/slack/slack_notify.py
-    WORKFLOW_CLASS: notification
-    EXECUTE_FLAG_NAME: STAGING_EXECUTE_SLACK_NOTIFY
-    REQUIRED_VARS: STAGING_SLACK_TOKEN,STAGING_SLACK_CHANNEL
-    WORKFLOW_NOTES: Reuse the internal Slack API notification pattern already used by shared CI templates. Notifications should summarize release and qualification outcomes and include failed job links without becoming a release gate.
-    WORKFLOW_PLAN: |
-      1. Gather failed non-allow-failure jobs from the current pipeline.
-      2. Build a Slack summary using the internal Slack API pattern rather than a one-off webhook.
-      3. Post to the configured post-merge or schedule channel only when the Slack token is loaded.
-      4. Keep notification delivery informational and non-authoritative.
-    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/slack-notify-rehearsal.py
-
 pages:
   extends:
     - .notification-family

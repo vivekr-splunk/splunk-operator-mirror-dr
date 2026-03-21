@@ -68,5 +68,7 @@ This is a controller bootstrap, not the final automation state. The product repo
 - upstream watchers for `splcore/main` and `docker-splunk-internal`
 - automatic digest discovery and pinning from upstream image readiness
 - controller-driven triggering of the qualification and release families
-- real publication to Jira, Slack, and Confluence
+- real publication to Jira and the GitLab-native status surfaces:
+  - GitLab Pages for live cycle detail
+  - org-managed `gitlab-slack` for transition alerts
 - automated escalation from qualification disposition into the executable product-release lane
