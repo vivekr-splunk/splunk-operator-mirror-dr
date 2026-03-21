@@ -6,6 +6,18 @@ import os
 from pathlib import Path
 
 
+def aliases_for_slug(slug: str) -> list[str]:
+    aliases = [slug]
+    if slug.endswith("-workflow"):
+        aliases.append(f"{slug[:-len('-workflow')]}-rehearsal")
+    aliases.append(f"{slug}-rehearsal")
+    deduped: list[str] = []
+    for alias in aliases:
+        if alias not in deduped:
+            deduped.append(alias)
+    return deduped
+
+
 def load_job_artifacts(rehearsal_dir: Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for mode_file in sorted(rehearsal_dir.glob("*-mode.txt")):
@@ -35,13 +47,16 @@ def main() -> int:
         for job in lane_selection.get("next_jobs", [])
         if job not in {"qualification-report-rehearsal", "compatibility-publish-rehearsal"}
     ]
-    jobs_by_slug = {job["slug"]: job for job in jobs}
-    observed_jobs = [jobs_by_slug[name] for name in evidence_job_names if name in jobs_by_slug]
+    jobs_by_alias: dict[str, dict[str, str]] = {}
+    for job in jobs:
+        for alias in aliases_for_slug(job["slug"]):
+            jobs_by_alias.setdefault(alias, job)
+    observed_jobs = [jobs_by_alias[name] for name in evidence_job_names if name in jobs_by_alias]
 
     blocked = [job["slug"] for job in observed_jobs if job["mode"] == "blocked-missing-vars"]
     plan_only = [job["slug"] for job in observed_jobs if job["mode"] == "plan-only"]
     executed = [job["slug"] for job in observed_jobs if job["mode"] == "executed-runtime"]
-    missing = [job for job in evidence_job_names if job not in jobs_by_slug]
+    missing = [job for job in evidence_job_names if job not in jobs_by_alias]
 
     override = os.environ.get("SOK_QUALIFICATION_DISPOSITION", "").strip()
     if override:
