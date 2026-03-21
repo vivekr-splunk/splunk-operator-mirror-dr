@@ -169,11 +169,11 @@
 - Present in the modularized graph but not yet executed end to end:
   - Azure integration family
     - concrete runtime script now exists
-    - current preferred rehearsal contract is protected `STAGING_AKS_KUBECONFIG` plus staging ACR and storage variables
+    - current preferred rehearsal contract is GitLab OIDC plus project-scoped Azure client variables, with protected `STAGING_AKS_KUBECONFIG` for existing-cluster mode
     - full AKS lifecycle remains available as a fallback path when the Azure staging credential set is loaded
   - GCP integration family
     - concrete runtime script now exists
-    - current preferred rehearsal contract is protected `STAGING_GKE_KUBECONFIG` plus staging Artifact Registry and bucket variables
+    - current preferred rehearsal contract is GitLab OIDC plus project-scoped workload-identity variables, with protected `STAGING_GKE_KUBECONFIG` for existing-cluster mode
     - full GKE lifecycle remains available as a fallback path when project and zone variables are loaded
   - distroless integration family
     - concrete build and integration runtime hooks now exist

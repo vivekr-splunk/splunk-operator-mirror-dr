@@ -39,6 +39,12 @@ require_envs() {
   done
 }
 
+env_present() {
+  env_name="$1"
+  env_value="$(printenv "${env_name}" 2>/dev/null || true)"
+  [ -n "${env_value}" ]
+}
+
 ensure_jq() {
   if command -v jq >/dev/null 2>&1; then
     return 0
@@ -143,4 +149,40 @@ materialize_file_secret() {
   fi
 
   printf '%s\n' "${secret_value}" > "${dest_path}"
+}
+
+azure_oidc_ready() {
+  env_present GITLAB_OIDC_TOKEN &&
+    env_present AZURE_CLIENT_ID &&
+    env_present AZURE_TENANT_ID &&
+    env_present AZURE_SUBSCRIPTION_ID
+}
+
+azure_login_oidc() {
+  require_envs GITLAB_OIDC_TOKEN AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID
+  az login --service-principal \
+    --username "${AZURE_CLIENT_ID}" \
+    --tenant "${AZURE_TENANT_ID}" \
+    --federated-token "${GITLAB_OIDC_TOKEN}" >/dev/null
+  az account set --subscription "${AZURE_SUBSCRIPTION_ID}" >/dev/null
+}
+
+gcp_oidc_ready() {
+  env_present GITLAB_OIDC_TOKEN &&
+    env_present GCP_WORKLOAD_IDENTITY_PROVIDER &&
+    env_present GCP_SERVICE_ACCOUNT_EMAIL
+}
+
+gcp_login_oidc() {
+  token_file="$1"
+  cred_file="$2"
+
+  require_envs GITLAB_OIDC_TOKEN GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT_EMAIL
+  printf '%s' "${GITLAB_OIDC_TOKEN}" > "${token_file}"
+  gcloud iam workload-identity-pools create-cred-config \
+    "${GCP_WORKLOAD_IDENTITY_PROVIDER}" \
+    --service-account="${GCP_SERVICE_ACCOUNT_EMAIL}" \
+    --credential-source-file="${token_file}" \
+    --output-file="${cred_file}" >/dev/null
+  gcloud auth login --cred-file="${cred_file}" --quiet >/dev/null
 }

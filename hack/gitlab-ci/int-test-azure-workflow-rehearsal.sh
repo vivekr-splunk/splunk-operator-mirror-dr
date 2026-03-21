@@ -62,8 +62,6 @@ ensure_jq
 require_commands bash az docker make kubectl go jq base64
 require_envs \
   STAGING_AZURE_ACR_LOGIN_SERVER \
-  STAGING_AZURE_ACR_DOCKER_USERNAME \
-  STAGING_AZURE_ACR_DOCKER_PASSWORD \
   STAGING_AZURE_STORAGE_ACCOUNT \
   STAGING_AZURE_STORAGE_ACCOUNT_KEY \
   STAGING_AZURE_TEST_CONTAINER \
@@ -75,24 +73,33 @@ azure_client_id=""
 azure_client_secret=""
 azure_tenant_id=""
 azure_subscription_id=""
+azure_auth_mode="acr-basic"
+
+if azure_oidc_ready; then
+  azure_auth_mode="oidc"
+elif [ -n "${STAGING_AZURE_CREDENTIALS:-}" ]; then
+  azure_auth_mode="service-principal"
+fi
 
 if [ -n "${STAGING_AKS_KUBECONFIG:-}" ]; then
   cluster_mode="existing-aks"
   materialize_file_secret "${STAGING_AKS_KUBECONFIG}" "${aks_kubeconfig_file}"
   export KUBECONFIG="${aks_kubeconfig_file}"
 else
-  require_envs \
-    STAGING_AZURE_CREDENTIALS \
-    STAGING_AZURE_RESOURCE_GROUP_NAME \
-    STAGING_AZURE_CONTAINER_REGISTRY
-  materialize_json_secret "${STAGING_AZURE_CREDENTIALS}" "${azure_creds_file}"
-  azure_client_id="$(jq -r '.clientId // empty' "${azure_creds_file}")"
-  azure_client_secret="$(jq -r '.clientSecret // empty' "${azure_creds_file}")"
-  azure_tenant_id="$(jq -r '.tenantId // empty' "${azure_creds_file}")"
-  azure_subscription_id="$(jq -r '.subscriptionId // empty' "${azure_creds_file}")"
+  require_envs STAGING_AZURE_RESOURCE_GROUP_NAME
+  if [ "${azure_auth_mode}" = "service-principal" ]; then
+    materialize_json_secret "${STAGING_AZURE_CREDENTIALS}" "${azure_creds_file}"
+    azure_client_id="$(jq -r '.clientId // empty' "${azure_creds_file}")"
+    azure_client_secret="$(jq -r '.clientSecret // empty' "${azure_creds_file}")"
+    azure_tenant_id="$(jq -r '.tenantId // empty' "${azure_creds_file}")"
+    azure_subscription_id="$(jq -r '.subscriptionId // empty' "${azure_creds_file}")"
 
-  if [ -z "${azure_client_id}" ] || [ -z "${azure_client_secret}" ] || [ -z "${azure_tenant_id}" ]; then
-    echo "Azure credentials payload is missing clientId/clientSecret/tenantId" >&2
+    if [ -z "${azure_client_id}" ] || [ -z "${azure_client_secret}" ] || [ -z "${azure_tenant_id}" ]; then
+      echo "Azure credentials payload is missing clientId/clientSecret/tenantId" >&2
+      exit 1
+    fi
+  elif [ "${azure_auth_mode}" = "acr-basic" ]; then
+    echo "Ephemeral AKS mode requires GitLab OIDC variables or STAGING_AZURE_CREDENTIALS" >&2
     exit 1
   fi
 fi
@@ -151,11 +158,16 @@ append_context "${context_file}" "enterprise_image" "${enterprise_image}"
 append_context "${context_file}" "azure_resource_group" "${AZURE_RESOURCE_GROUP}"
 append_context "${context_file}" "azure_container_registry" "${AZURE_CONTAINER_REGISTRY}"
 append_context "${context_file}" "azure_region" "${AZURE_REGION}"
+append_context "${context_file}" "azure_auth_mode" "${azure_auth_mode}"
 append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
 append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 
-if [ "${cluster_mode}" = "ephemeral-aks" ]; then
+if [ "${azure_auth_mode}" = "oidc" ]; then
+  log_step "azure:auth:start mode=oidc" | tee -a "${run_log}" >/dev/null
+  azure_login_oidc >> "${run_log}" 2>&1
+  log_step "azure:auth:complete" | tee -a "${run_log}" >/dev/null
+elif [ "${cluster_mode}" = "ephemeral-aks" ]; then
   log_step "azure:auth:start" | tee -a "${run_log}" >/dev/null
   az login --service-principal \
     --username "${azure_client_id}" \
@@ -170,7 +182,12 @@ else
 fi
 
 log_step "azure:registry-login:start ${operator_registry}" | tee -a "${run_log}" >/dev/null
-printf '%s' "${STAGING_AZURE_ACR_DOCKER_PASSWORD}" | docker login "${operator_registry}" -u "${STAGING_AZURE_ACR_DOCKER_USERNAME}" --password-stdin >> "${run_log}" 2>&1
+if [ "${azure_auth_mode}" = "oidc" ] || [ "${azure_auth_mode}" = "service-principal" ]; then
+  az acr login --name "${AZURE_CONTAINER_REGISTRY}" >> "${run_log}" 2>&1
+else
+  require_envs STAGING_AZURE_ACR_DOCKER_USERNAME STAGING_AZURE_ACR_DOCKER_PASSWORD
+  printf '%s' "${STAGING_AZURE_ACR_DOCKER_PASSWORD}" | docker login "${operator_registry}" -u "${STAGING_AZURE_ACR_DOCKER_USERNAME}" --password-stdin >> "${run_log}" 2>&1
+fi
 log_step "azure:registry-login:complete" | tee -a "${run_log}" >/dev/null
 
 log_step "azure:build:start image=${operator_image}" | tee -a "${build_log}" >/dev/null

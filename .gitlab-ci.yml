@@ -839,14 +839,17 @@ int-test-azure-workflow-rehearsal:
     - .workflow-rehearsal-template
     - .integration-family-10h
     - .rules-main-or-mr
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: $GITLAB_OIDC_AUDIENCE
   variables:
     WORKFLOW_SLUG: int-test-azure-workflow
     WORKFLOW_NAME: Integration Test on Azure Workflow
     SOURCE_WORKFLOW_FILE: .github/workflows/int-test-azure-workflow.yml
     WORKFLOW_CLASS: integration-azure
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_AZURE_INTEGRATION
-    REQUIRED_VARS: STAGING_AZURE_ACR_LOGIN_SERVER,STAGING_AZURE_ACR_DOCKER_USERNAME,STAGING_AZURE_ACR_DOCKER_PASSWORD,STAGING_AZURE_STORAGE_ACCOUNT,STAGING_AZURE_STORAGE_ACCOUNT_KEY,STAGING_AZURE_TEST_CONTAINER,STAGING_AZURE_INDEXES_CONTAINER,STAGING_SPLUNK_ENTERPRISE_IMAGE
-    WORKFLOW_NOTES: Preferred rehearsal mode uses a protected `STAGING_AKS_KUBECONFIG` file variable for an existing AKS cluster. Full AKS lifecycle remains supported when the Azure staging credential set is loaded.
+    REQUIRED_VARS: STAGING_AZURE_ACR_LOGIN_SERVER,STAGING_AZURE_STORAGE_ACCOUNT,STAGING_AZURE_STORAGE_ACCOUNT_KEY,STAGING_AZURE_TEST_CONTAINER,STAGING_AZURE_INDEXES_CONTAINER,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: Preferred rehearsal mode uses GitLab OIDC plus project-level Azure client and tenant variables, together with a protected `STAGING_AKS_KUBECONFIG` file variable for an existing AKS cluster. Static Azure credentials and ACR username/password remain as fallback only.
     WORKFLOW_PLAN: |
       1. Build the operator image in staging ACR only.
       2. Prefer an existing staging AKS cluster via protected kubeconfig input; fall back to disposable cluster creation only when required.
@@ -859,14 +862,17 @@ int-test-gcp-workflow-rehearsal:
     - .workflow-rehearsal-template
     - .integration-family-10h
     - .rules-main-or-mr
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: $GITLAB_OIDC_AUDIENCE
   variables:
     WORKFLOW_SLUG: int-test-gcp-workflow
     WORKFLOW_NAME: Integration Test on GCP Workflow
     SOURCE_WORKFLOW_FILE: .github/workflows/int-test-gcp-workflow.yml
     WORKFLOW_CLASS: integration-gcp
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_GCP_INTEGRATION
-    REQUIRED_VARS: STAGING_GCP_ARTIFACT_REGISTRY,STAGING_GCP_SERVICE_ACCOUNT_KEY,STAGING_GCP_PROJECT_ID,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
-    WORKFLOW_NOTES: Preferred rehearsal mode uses a protected `STAGING_GKE_KUBECONFIG` file variable for an existing GKE cluster. Full GKE lifecycle remains supported when project and zone variables are loaded.
+    REQUIRED_VARS: STAGING_GCP_ARTIFACT_REGISTRY,STAGING_GCP_PROJECT_ID,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: Preferred rehearsal mode uses GitLab OIDC plus project-level GCP workload-identity variables, together with a protected `STAGING_GKE_KUBECONFIG` file variable for an existing GKE cluster. Static service-account JSON remains as fallback only.
     WORKFLOW_PLAN: |
       1. Build the operator image in staging Artifact Registry only.
       2. Prefer an existing staging GKE cluster via protected kubeconfig input; fall back to disposable cluster creation only when required.

@@ -17,6 +17,8 @@ run_log="rehearsal/${WORKFLOW_SLUG}-run.log"
 pod_log_root="rehearsal/${WORKFLOW_SLUG}-pod-logs"
 integration_junit="rehearsal/${WORKFLOW_SLUG}-inttest-junit.xml"
 gcp_key_file="$(mktemp /tmp/${WORKFLOW_SLUG}-gcp-key.XXXXXX.json)"
+gcp_oidc_token_file="$(mktemp /tmp/${WORKFLOW_SLUG}-gcp-token.XXXXXX.jwt)"
+gcp_oidc_cred_file="$(mktemp /tmp/${WORKFLOW_SLUG}-gcp-cred.XXXXXX.json)"
 gke_kubeconfig_file="$(mktemp /tmp/${WORKFLOW_SLUG}-kubeconfig.XXXXXX)"
 cluster_mode="ephemeral-gke"
 
@@ -42,6 +44,8 @@ cleanup_and_exit() {
   log_step "cleanup:complete cleanup_rc=${cleanup_rc}" | tee -a "${cleanup_log}" >/dev/null
 
   rm -f "${gcp_key_file}"
+  rm -f "${gcp_oidc_token_file}"
+  rm -f "${gcp_oidc_cred_file}"
   rm -f "${gke_kubeconfig_file}"
 
   if [ "${rc}" -ne 0 ]; then
@@ -62,12 +66,18 @@ ensure_jq
 require_commands bash gcloud docker make kubectl go jq base64
 require_envs \
   STAGING_GCP_ARTIFACT_REGISTRY \
-  STAGING_GCP_SERVICE_ACCOUNT_KEY \
   STAGING_GCP_PROJECT_ID \
   STAGING_SPLUNK_ENTERPRISE_IMAGE
 ensure_internal_image_ref "${STAGING_SPLUNK_ENTERPRISE_IMAGE}" "GCP enterprise image"
 
-materialize_json_secret "${STAGING_GCP_SERVICE_ACCOUNT_KEY}" "${gcp_key_file}"
+gcp_auth_mode="service-account-key"
+if gcp_oidc_ready; then
+  gcp_auth_mode="oidc"
+else
+  require_envs STAGING_GCP_SERVICE_ACCOUNT_KEY
+  materialize_json_secret "${STAGING_GCP_SERVICE_ACCOUNT_KEY}" "${gcp_key_file}"
+fi
+
 if [ -n "${STAGING_GKE_KUBECONFIG:-}" ]; then
   cluster_mode="existing-gke"
   materialize_file_secret "${STAGING_GKE_KUBECONFIG}" "${gke_kubeconfig_file}"
@@ -120,14 +130,14 @@ export COMMIT_HASH="${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}"
 export GITLAB_MIGRATION_WORKFLOW="gcp"
 
 log_step "gcp:auth:start" | tee -a "${run_log}" >/dev/null
-gcloud auth activate-service-account --key-file="${gcp_key_file}" >> "${run_log}" 2>&1
+if [ "${gcp_auth_mode}" = "oidc" ]; then
+  gcp_login_oidc "${gcp_oidc_token_file}" "${gcp_oidc_cred_file}" >> "${run_log}" 2>&1
+else
+  gcloud auth activate-service-account --key-file="${gcp_key_file}" >> "${run_log}" 2>&1
+fi
 gcloud config set project "${GCP_PROJECT_ID}" >> "${run_log}" 2>&1
-gcloud auth configure-docker "${GCP_ARTIFACT_REGISTRY}" --quiet >> "${run_log}" 2>&1
+gcloud auth configure-docker "$(printf '%s' "${GCP_ARTIFACT_REGISTRY}" | cut -d/ -f1)" --quiet >> "${run_log}" 2>&1
 log_step "gcp:auth:complete" | tee -a "${run_log}" >/dev/null
-
-log_step "gcp:registry-login:start ${operator_registry}" | tee -a "${run_log}" >/dev/null
-docker login -u _json_key --password-stdin "${operator_registry}" < "${gcp_key_file}" >> "${run_log}" 2>&1
-log_step "gcp:registry-login:complete" | tee -a "${run_log}" >/dev/null
 
 append_context "${context_file}" "workflow" "${WORKFLOW_SLUG}"
 append_context "${context_file}" "cluster_mode" "${cluster_mode}"
@@ -142,6 +152,7 @@ append_context "${context_file}" "enterprise_image" "${enterprise_image}"
 append_context "${context_file}" "gcp_project_id" "${GCP_PROJECT_ID}"
 append_context "${context_file}" "gcp_region" "${GCP_REGION}"
 append_context "${context_file}" "gcp_zone" "${GCP_ZONE}"
+append_context "${context_file}" "gcp_auth_mode" "${gcp_auth_mode}"
 append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
 append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
