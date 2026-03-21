@@ -13,7 +13,7 @@ export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
 export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
 context_file="rehearsal/${WORKFLOW_SLUG}-runtime-context.txt"
 : > "${context_file}"
-TRIVY_RELEASE="${STAGING_TRIVY_RELEASE:-latest}"
+TRIVY_RELEASE="${STAGING_TRIVY_RELEASE:-v0.69.3}"
 
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update
