@@ -20,16 +20,20 @@ mkdir -p "rehearsal" "${output_dir}"
 
 load_repo_dotenv "${CI_PROJECT_DIR}/.env"
 load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-controller/release-cycle.env"
+resolve_enterprise_source_image
 
 current_version="$(awk '/^VERSION[[:space:]]*\?/ {print $3; exit}' "${CI_PROJECT_DIR}/Makefile")"
 target_version="${STAGING_PSR_TARGET_VERSION:-${SOK_RELEASE_CANDIDATE_VERSION:-${SOK_TARGET_RELEASE_VERSION:-${current_version}}}}"
 base_version="${STAGING_PSR_BASE_VERSION:-${current_version}}"
-enterprise_image="${SPLUNK_ENTERPRISE_RELEASE_IMAGE:-${SOK_ENTERPRISE_IMAGE:-${STAGING_SPLUNK_ENTERPRISE_IMAGE:-}}}"
+enterprise_image="${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO}"
 test_types="${STAGING_PSR_TEST_TYPES:-upgrade,app_framework,perf}"
 clouds="${STAGING_PSR_CLOUDS:-aws,azure}"
 psr_project="${STAGING_PSR_PROJECT_PATH:-psr/k8s-operator}"
 
 append_context "${context_file}" "release_branch" "${SOK_RELEASE_BRANCH:-}"
+append_context "${context_file}" "source_mode" "${RESOLVED_SOK_SOURCE_MODE}"
+append_context "${context_file}" "trigger_kind" "${RESOLVED_SOK_TRIGGER_KIND}"
+append_context "${context_file}" "enterprise_image_source" "${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_SOURCE}"
 append_context "${context_file}" "psr_project" "${psr_project}"
 append_context "${context_file}" "psr_target_version" "${target_version}"
 append_context "${context_file}" "psr_base_version" "${base_version}"

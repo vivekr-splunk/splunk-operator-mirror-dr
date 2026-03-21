@@ -26,6 +26,8 @@ log_step() {
 mkdir -p "${pod_log_dir}"
 
 load_repo_dotenv "${CI_PROJECT_DIR}/.env"
+load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-controller/release-cycle.env"
+resolve_enterprise_source_image
 
 ci_bin_dir="${CI_PROJECT_DIR}/bin"
 ensure_ci_bin_path "${ci_bin_dir}"
@@ -54,7 +56,7 @@ if [ -z "${RESOLVED_ECR_REGION}" ]; then
   exit 1
 fi
 
-enterprise_image="${STAGING_SPLUNK_ENTERPRISE_IMAGE#docker.io/}"
+enterprise_image="${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO}"
 requested_profile="${STAGING_INT_TEST_PROFILE:-${JOB_INT_TEST_PROFILE:-managersecret}}"
 resolve_integration_profile "${requested_profile}"
 test_focus="${RESOLVED_INT_TEST_FOCUS}"
@@ -103,6 +105,9 @@ append_context "${context_file}" "cluster_wide" "${CLUSTER_WIDE}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 append_context "${context_file}" "operator_image" "${SPLUNK_OPERATOR_IMAGE}"
 append_context "${context_file}" "enterprise_image" "${SPLUNK_ENTERPRISE_IMAGE}"
+append_context "${context_file}" "source_mode" "${RESOLVED_SOK_SOURCE_MODE}"
+append_context "${context_file}" "trigger_kind" "${RESOLVED_SOK_TRIGGER_KIND}"
+append_context "${context_file}" "enterprise_image_source" "${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_SOURCE}"
 append_context "${context_file}" "aws_auth_mode" "${aws_auth_mode}"
 append_context "${context_file}" "normalized_commit_hash" "${COMMIT_HASH}"
 append_context "${context_file}" "kubectl_version" "${KUBECTL_VERSION}"

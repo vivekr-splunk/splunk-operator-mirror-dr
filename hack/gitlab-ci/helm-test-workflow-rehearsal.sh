@@ -27,6 +27,8 @@ log_step() {
 mkdir -p "${kuttl_artifacts_dir}"
 
 load_repo_dotenv "${CI_PROJECT_DIR}/.env"
+load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-controller/release-cycle.env"
+resolve_enterprise_source_image
 
 ci_bin_dir="${CI_PROJECT_DIR}/bin"
 ensure_ci_bin_path "${ci_bin_dir}"
@@ -66,7 +68,7 @@ export ECR_REGISTRY="${ECR_REGISTRY}"
 export ECR_REPOSITORY="${ECR_REGISTRY}"
 export PRIVATE_REGISTRY="${ECR_REGISTRY}"
 export SPLUNK_OPERATOR_IMAGE="${OPERATOR_REPOSITORY_PATH}:${IMAGE_TAG}"
-export SPLUNK_ENTERPRISE_IMAGE="${STAGING_SPLUNK_ENTERPRISE_IMAGE}"
+export SPLUNK_ENTERPRISE_IMAGE="${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO}"
 export TEST_CLUSTER_PLATFORM="eks"
 export TEST_CLUSTER_NAME="${cluster_name_prefix}-${CI_JOB_ID}"
 export CLUSTER_WIDE="${STAGING_HELM_CLUSTER_WIDE:-true}"
@@ -93,6 +95,9 @@ append_context "${context_file}" "helm_test_profile" "${RESOLVED_HELM_TEST_PROFI
 append_context "${context_file}" "helm_test_dirs" "${RESOLVED_HELM_TEST_DIRS}"
 append_context "${context_file}" "helm_test_timeout" "${RESOLVED_HELM_TEST_TIMEOUT}"
 append_context "${context_file}" "helm_test_parallel" "${RESOLVED_HELM_TEST_PARALLEL}"
+append_context "${context_file}" "source_mode" "${RESOLVED_SOK_SOURCE_MODE}"
+append_context "${context_file}" "trigger_kind" "${RESOLVED_SOK_TRIGGER_KIND}"
+append_context "${context_file}" "enterprise_image_source" "${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_SOURCE}"
 append_context "${context_file}" "aws_auth_mode" "${aws_auth_mode}"
 append_context "${context_file}" "helm_version" "${HELM_VERSION}"
 append_context "${context_file}" "kuttl_version" "${KUTTL_VERSION}"

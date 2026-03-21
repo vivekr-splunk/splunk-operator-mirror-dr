@@ -73,6 +73,59 @@ def normalize_psr_target_version(value: str) -> str:
     return candidate
 
 
+def resolve_source_mode(env: dict[str, str], cycle_contract: dict[str, str], pipeline_mode: str, release_required: bool) -> tuple[str, str]:
+    explicit = first_non_empty(env.get("SOK_SOURCE_MODE"), cycle_contract.get("SOURCE_MODE"), default="")
+    if explicit in {"develop", "release"}:
+        return explicit, "explicit-source-mode"
+
+    target_branch = first_non_empty(
+        env.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME"),
+        env.get("CI_COMMIT_REF_NAME"),
+        default="",
+    )
+    if pipeline_mode in {"qualification_lane", "release_train"} or release_required:
+        return "release", "qualification-or-release-lane"
+    if target_branch == "main" or target_branch.startswith("release/") or target_branch.startswith("patch/"):
+        return "release", "stable-target-branch"
+    return "develop", "develop-target-branch-default"
+
+
+def resolve_trigger_kind(
+    env: dict[str, str], cycle_contract: dict[str, str], source_mode: str, pipeline_mode: str
+) -> tuple[str, str]:
+    explicit = first_non_empty(env.get("SOK_TRIGGER_KIND"), cycle_contract.get("TRIGGER_KIND"), default="")
+    if explicit:
+        return explicit, "explicit-trigger-kind"
+
+    if source_mode == "release":
+        if first_non_empty(
+            env.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE"),
+            cycle_contract.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE"),
+            env.get("SPLUNK_ENTERPRISE_IMAGE_DIGEST"),
+            cycle_contract.get("SPLUNK_ENTERPRISE_IMAGE_DIGEST"),
+            default="",
+        ):
+            return "release-image-ready", "release-image-input"
+        if pipeline_mode == "qualification_lane":
+            return "qualification-cycle", "qualification-lane"
+        return "release-branch-cut", "release-source-default"
+
+    if first_non_empty(
+        env.get("SPLUNK_ENTERPRISE_DEVELOP_IMAGE"),
+        cycle_contract.get("SPLUNK_ENTERPRISE_DEVELOP_IMAGE"),
+        default="",
+    ):
+        return "develop-image-ready", "develop-image-input"
+    return "develop-checkin", "develop-source-default"
+
+
+def resolve_image(candidates: list[tuple[str | None, str]]) -> tuple[str, str]:
+    for value, source in candidates:
+        if value is not None and str(value).strip():
+            return str(value).strip(), source
+    return "unknown", "unresolved"
+
+
 @dataclass
 class ReleaseContext:
     manifest: dict[str, object]
@@ -90,14 +143,6 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
         env.get("STAGING_RELEASE_VERSION"),
         dotenv.get("VERSION"),
         default=read_makefile_version(project_dir),
-    )
-    enterprise_image = first_non_empty(
-        env.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE"),
-        env.get("SPLUNK_ENTERPRISE_IMAGE"),
-        env.get("STAGING_SPLUNK_ENTERPRISE_IMAGE"),
-        cycle_contract.get("SPLUNK_ENTERPRISE_IMAGE"),
-        dotenv.get("RELATED_IMAGE_SPLUNK_ENTERPRISE"),
-        default="unknown",
     )
     pipeline_mode = env.get("REHEARSAL_PIPELINE_MODE", "full")
     release_required = bool_env(
@@ -120,6 +165,58 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
     else:
         effective_lane = "qualification"
         selection_reason = "default-qualification"
+    source_mode, source_mode_reason = resolve_source_mode(env, cycle_contract, pipeline_mode, release_required)
+    trigger_kind, trigger_kind_reason = resolve_trigger_kind(env, cycle_contract, source_mode, pipeline_mode)
+    develop_enterprise_image, develop_enterprise_image_source = resolve_image(
+        [
+            (env.get("SPLUNK_ENTERPRISE_DEVELOP_IMAGE"), "env.SPLUNK_ENTERPRISE_DEVELOP_IMAGE"),
+            (cycle_contract.get("SPLUNK_ENTERPRISE_DEVELOP_IMAGE"), "cycle.SPLUNK_ENTERPRISE_DEVELOP_IMAGE"),
+            (dotenv.get("SPLUNK_ENTERPRISE_DEVELOP_IMAGE"), "dotenv.SPLUNK_ENTERPRISE_DEVELOP_IMAGE"),
+        ]
+    )
+    release_enterprise_image, release_enterprise_image_source = resolve_image(
+        [
+            (env.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE"), "env.SPLUNK_ENTERPRISE_RELEASE_IMAGE"),
+            (cycle_contract.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE"), "cycle.SPLUNK_ENTERPRISE_RELEASE_IMAGE"),
+            (env.get("SPLUNK_ENTERPRISE_IMAGE"), "env.SPLUNK_ENTERPRISE_IMAGE"),
+            (cycle_contract.get("SPLUNK_ENTERPRISE_IMAGE"), "cycle.SPLUNK_ENTERPRISE_IMAGE"),
+            (env.get("STAGING_SPLUNK_ENTERPRISE_IMAGE"), "env.STAGING_SPLUNK_ENTERPRISE_IMAGE"),
+            (dotenv.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE"), "dotenv.SPLUNK_ENTERPRISE_RELEASE_IMAGE"),
+            (dotenv.get("RELATED_IMAGE_SPLUNK_ENTERPRISE"), "dotenv.RELATED_IMAGE_SPLUNK_ENTERPRISE"),
+        ]
+    )
+    if source_mode == "develop":
+        enterprise_image = first_non_empty(
+            develop_enterprise_image,
+            env.get("STAGING_SPLUNK_ENTERPRISE_IMAGE"),
+            release_enterprise_image,
+            dotenv.get("RELATED_IMAGE_SPLUNK_ENTERPRISE"),
+            default="unknown",
+        )
+        if enterprise_image == develop_enterprise_image:
+            enterprise_image_source = develop_enterprise_image_source
+        elif enterprise_image == env.get("STAGING_SPLUNK_ENTERPRISE_IMAGE"):
+            enterprise_image_source = "env.STAGING_SPLUNK_ENTERPRISE_IMAGE"
+        elif enterprise_image == release_enterprise_image:
+            enterprise_image_source = release_enterprise_image_source
+        else:
+            enterprise_image_source = "dotenv.RELATED_IMAGE_SPLUNK_ENTERPRISE"
+    else:
+        enterprise_image = first_non_empty(
+            release_enterprise_image,
+            env.get("STAGING_SPLUNK_ENTERPRISE_IMAGE"),
+            develop_enterprise_image,
+            dotenv.get("RELATED_IMAGE_SPLUNK_ENTERPRISE"),
+            default="unknown",
+        )
+        if enterprise_image == release_enterprise_image:
+            enterprise_image_source = release_enterprise_image_source
+        elif enterprise_image == env.get("STAGING_SPLUNK_ENTERPRISE_IMAGE"):
+            enterprise_image_source = "env.STAGING_SPLUNK_ENTERPRISE_IMAGE"
+        elif enterprise_image == develop_enterprise_image:
+            enterprise_image_source = develop_enterprise_image_source
+        else:
+            enterprise_image_source = "dotenv.RELATED_IMAGE_SPLUNK_ENTERPRISE"
 
     release_candidate_version = first_non_empty(
         env.get("STAGING_RELEASE_CANDIDATE_VERSION"),
@@ -177,10 +274,19 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
                 env.get("CI_PIPELINE_SOURCE"),
                 default="manual-rehearsal",
             ),
+            "trigger_kind": trigger_kind,
+            "trigger_kind_reason": trigger_kind_reason,
             "trigger_reason": first_non_empty(env.get("SOK_TRIGGER_REASON"), default="release-qualification-rehearsal"),
+            "source_mode": source_mode,
+            "source_mode_reason": source_mode_reason,
             "cycle_id": first_non_empty(env.get("SOK_CYCLE_ID"), cycle_contract.get("CYCLE_ID"), default="unversioned-cycle"),
             "planned_start_date": first_non_empty(cycle_contract.get("PLANNED_START_DATE"), default="unplanned"),
             "branch_cut_date": first_non_empty(cycle_contract.get("BRANCH_CUT_DATE"), default="unknown"),
+            "target_branch": first_non_empty(
+                env.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME"),
+                env.get("CI_COMMIT_REF_NAME"),
+                default="unknown",
+            ),
         },
         "lane": {
             "selected": effective_lane,
@@ -209,6 +315,9 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
             ),
             "major": first_non_empty(env.get("SPLUNK_MAJOR"), default="unknown"),
             "enterprise_image": enterprise_image,
+            "enterprise_image_source": enterprise_image_source,
+            "develop_enterprise_image": develop_enterprise_image,
+            "release_enterprise_image": release_enterprise_image,
             "enterprise_image_digest": first_non_empty(
                 env.get("SPLUNK_ENTERPRISE_IMAGE_DIGEST"),
                 cycle_contract.get("SPLUNK_ENTERPRISE_IMAGE_DIGEST"),
@@ -301,6 +410,8 @@ def write_dotenv(path: Path, manifest: dict[str, object]) -> None:
         f"SOK_LANE_SELECTION_REASON={lane['selection_reason']}",
         f"SOK_RELEASE_REQUIRED={'true' if lane['release_required'] else 'false'}",
         f"SOK_PUBLIC_PUBLICATION_ENABLED={'true' if lane['public_publication_enabled'] else 'false'}",
+        f"SOK_SOURCE_MODE={manifest['source']['source_mode']}",
+        f"SOK_TRIGGER_KIND={manifest['source']['trigger_kind']}",
         f"SOK_BASELINE_BRANCH={sok['baseline_branch']}",
         f"SOK_BASELINE_VERSION={sok['baseline_version']}",
         f"SOK_TARGET_RELEASE_VERSION={sok['target_release_version']}",
@@ -309,6 +420,9 @@ def write_dotenv(path: Path, manifest: dict[str, object]) -> None:
         f"SOK_SPLUNK_BRANCH={splunk['branch']}",
         f"SOK_SPLUNK_VERSION={splunk['version']}",
         f"SOK_ENTERPRISE_IMAGE={splunk['enterprise_image']}",
+        f"SOK_ENTERPRISE_IMAGE_SOURCE={splunk['enterprise_image_source']}",
+        f"SOK_ENTERPRISE_DEVELOP_IMAGE={splunk['develop_enterprise_image']}",
+        f"SOK_ENTERPRISE_RELEASE_IMAGE={splunk['release_enterprise_image']}",
         f"SOK_QUALIFICATION_PROFILE={qualification['profile']}",
         f"SOK_HELM_PROFILE={qualification['helm_profile']}",
         f"SOK_QUALIFICATION_PROFILES={','.join(qualification['profiles'])}",

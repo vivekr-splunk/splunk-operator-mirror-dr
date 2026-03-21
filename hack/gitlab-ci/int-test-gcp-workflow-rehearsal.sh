@@ -62,13 +62,15 @@ cleanup_and_exit() {
 trap 'cleanup_and_exit $?' EXIT INT TERM
 
 prepare_runtime_artifacts "${context_file}" "${cleanup_log}" "${cluster_log}" "${build_log}" "${run_log}" "${pod_log_root}"
+load_repo_dotenv "${CI_PROJECT_DIR}/.env"
+load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-controller/release-cycle.env"
+resolve_enterprise_source_image
 ensure_jq
 ensure_gcloud_cli
 require_commands bash gcloud docker make kubectl go jq base64
 require_envs \
   STAGING_GCP_ARTIFACT_REGISTRY \
-  STAGING_GCP_PROJECT_ID \
-  STAGING_SPLUNK_ENTERPRISE_IMAGE
+  STAGING_GCP_PROJECT_ID
 
 gcp_auth_mode="service-account-key"
 if [ -n "${STAGING_GCP_SERVICE_ACCOUNT_KEY:-}" ]; then
@@ -93,7 +95,7 @@ fi
 
 operator_registry="${STAGING_GCP_ARTIFACT_REGISTRY}"
 operator_image="${operator_registry}/splunk/splunk-operator:${CI_COMMIT_SHA}"
-enterprise_source_image="${STAGING_SPLUNK_ENTERPRISE_IMAGE}"
+enterprise_source_image="${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO}"
 cluster_name="gke-${CI_JOB_ID}"
 test_focus="${STAGING_GCP_TEST_FOCUS:-s1_gcp_sanity}"
 test_to_skip="${STAGING_GCP_TEST_TO_SKIP:-^(?:[^s]+|s(?:$|[^m]|m(?:$|[^o]|o(?:$|[^k]|k(?:$|[^e])))))*$}"
@@ -160,6 +162,9 @@ append_context "${context_file}" "cluster_wide" "${CLUSTER_WIDE}"
 append_context "${context_file}" "deployment_type" "${DEPLOYMENT_TYPE}"
 append_context "${context_file}" "operator_image" "${operator_image}"
 append_context "${context_file}" "enterprise_source_image" "${enterprise_source_image}"
+append_context "${context_file}" "source_mode" "${RESOLVED_SOK_SOURCE_MODE}"
+append_context "${context_file}" "trigger_kind" "${RESOLVED_SOK_TRIGGER_KIND}"
+append_context "${context_file}" "enterprise_image_source" "${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_SOURCE}"
 append_context "${context_file}" "gcp_project_id" "${GCP_PROJECT_ID}"
 append_context "${context_file}" "gcp_region" "${GCP_REGION}"
 append_context "${context_file}" "gcp_zone" "${GCP_ZONE}"

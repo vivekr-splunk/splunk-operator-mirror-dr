@@ -58,6 +58,9 @@ cleanup_and_exit() {
 trap 'cleanup_and_exit $?' EXIT INT TERM
 
 prepare_runtime_artifacts "${context_file}" "${cleanup_log}" "${cluster_log}" "${build_log}" "${run_log}" "${pod_log_dir}"
+load_repo_dotenv "${CI_PROJECT_DIR}/.env"
+load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-controller/release-cycle.env"
+resolve_enterprise_source_image
 ensure_jq
 ensure_azure_cli
 require_commands bash az docker make kubectl go jq base64
@@ -66,8 +69,7 @@ require_envs \
   STAGING_AZURE_STORAGE_ACCOUNT \
   STAGING_AZURE_STORAGE_ACCOUNT_KEY \
   STAGING_AZURE_TEST_CONTAINER \
-  STAGING_AZURE_INDEXES_CONTAINER \
-  STAGING_SPLUNK_ENTERPRISE_IMAGE
+  STAGING_AZURE_INDEXES_CONTAINER
 
 azure_client_id=""
 azure_client_secret=""
@@ -106,7 +108,7 @@ fi
 
 operator_registry="${STAGING_AZURE_ACR_LOGIN_SERVER}"
 operator_image="${operator_registry}/splunk/splunk-operator:${CI_COMMIT_SHA}"
-enterprise_source_image="${STAGING_SPLUNK_ENTERPRISE_IMAGE}"
+enterprise_source_image="${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO}"
 cluster_name="az${CI_JOB_ID}"
 test_focus="${STAGING_AZURE_TEST_FOCUS:-azure_sanity}"
 test_to_skip="${STAGING_AZURE_TEST_TO_SKIP:-^(?:[^i]+|i(?:$|[^n]|n(?:$|[^t]|t(?:$|[^e]|e(?:$|[^g]|g(?:$|[^r]|r(?:$|[^a]|a(?:$|[^t]|t(?:$|[^i]|i(?:$|[^o]|o(?:$|[^n])))))))))))*$}"
@@ -155,6 +157,9 @@ append_context "${context_file}" "cluster_wide" "${CLUSTER_WIDE}"
 append_context "${context_file}" "deployment_type" "${DEPLOYMENT_TYPE}"
 append_context "${context_file}" "operator_image" "${operator_image}"
 append_context "${context_file}" "enterprise_source_image" "${enterprise_source_image}"
+append_context "${context_file}" "source_mode" "${RESOLVED_SOK_SOURCE_MODE}"
+append_context "${context_file}" "trigger_kind" "${RESOLVED_SOK_TRIGGER_KIND}"
+append_context "${context_file}" "enterprise_image_source" "${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_SOURCE}"
 append_context "${context_file}" "azure_resource_group" "${AZURE_RESOURCE_GROUP}"
 append_context "${context_file}" "azure_container_registry" "${AZURE_CONTAINER_REGISTRY}"
 append_context "${context_file}" "azure_region" "${AZURE_REGION}"

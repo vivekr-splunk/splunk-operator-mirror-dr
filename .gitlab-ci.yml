@@ -30,6 +30,8 @@ variables:
   INTERNAL_CI_IMAGE: "docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.25-aws:5.1.0"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   REHEARSAL_PIPELINE_MODE: "full"
+  SOK_SOURCE_MODE: "develop"
+  SOK_TRIGGER_KIND: "develop-checkin"
   # Supported focused modes:
   # - build_scan
   # - eks_integration
@@ -759,7 +761,7 @@ int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/int-test-workflow.yml
     WORKFLOW_CLASS: integration-eks
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_EKS_INTEGRATION
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This job now executes the first real staging-only EKS integration runtime. It reuses the standard build artifact, mirrors the Splunk Enterprise image into staging ECR, provisions an ephemeral EKS cluster, runs one integration profile selected by STAGING_INT_TEST_PROFILE, and always performs cleanup.
     WORKFLOW_PLAN: |
       1. Reuse the operator image already built into staging ECR by the standard build rehearsal.
@@ -883,7 +885,7 @@ int-test-azure-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/int-test-azure-workflow.yml
     WORKFLOW_CLASS: integration-azure
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_AZURE_INTEGRATION
-    REQUIRED_VARS: STAGING_AZURE_ACR_LOGIN_SERVER,STAGING_AZURE_STORAGE_ACCOUNT,STAGING_AZURE_STORAGE_ACCOUNT_KEY,STAGING_AZURE_TEST_CONTAINER,STAGING_AZURE_INDEXES_CONTAINER,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_AZURE_ACR_LOGIN_SERVER,STAGING_AZURE_STORAGE_ACCOUNT,STAGING_AZURE_STORAGE_ACCOUNT_KEY,STAGING_AZURE_TEST_CONTAINER,STAGING_AZURE_INDEXES_CONTAINER
     WORKFLOW_NOTES: The current GitHub-compatible rehearsal path still creates a disposable AKS cluster and should prefer GitLab OIDC plus project-level Azure client and tenant variables. A protected `STAGING_AKS_KUBECONFIG` file variable remains available only as a fallback for debug or break-glass validation.
     WORKFLOW_PLAN: |
       1. Build the operator image in staging ACR only.
@@ -906,7 +908,7 @@ int-test-gcp-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/int-test-gcp-workflow.yml
     WORKFLOW_CLASS: integration-gcp
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_GCP_INTEGRATION
-    REQUIRED_VARS: STAGING_GCP_ARTIFACT_REGISTRY,STAGING_GCP_PROJECT_ID,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_GCP_ARTIFACT_REGISTRY,STAGING_GCP_PROJECT_ID,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: The current GitHub-compatible rehearsal path still creates a disposable GKE cluster and should prefer GitLab OIDC plus project-level GCP workload-identity variables. A protected `STAGING_GKE_KUBECONFIG` file variable remains available only as a fallback for debug or break-glass validation.
     WORKFLOW_PLAN: |
       1. Build the operator image in staging Artifact Registry only.
@@ -930,7 +932,7 @@ distroless-int-test-workflow-rehearsal:
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_DISTROLESS_INTEGRATION
     JOB_INT_TEST_PROFILE: managersecret
     BUILD_IMAGE_REF_FILE: rehearsal/distroless-build-test-push-workflow-image-ref.txt
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This job now has a concrete distroless integration contract. It consumes the distroless build artifact emitted in the same pipeline, uses the staging enterprise image, and remains staging-only until runtime proof is complete.
     WORKFLOW_PLAN: |
       1. Build and pull the distroless operator image from staging ECR only.
@@ -958,7 +960,7 @@ helm-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/helm-test-workflow.yml
     WORKFLOW_CLASS: integration-helm
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_HELM_TEST
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_TEST_VPC_ENDPOINT_URL,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_TEST_VPC_ENDPOINT_URL
     WORKFLOW_NOTES: This workflow combines image build, EKS setup, helm packaging, and kuttl-based helm validation. It must remain fully staging-only and now supports profile-driven suite partitioning through STAGING_HELM_TEST_PROFILE.
     WORKFLOW_PLAN: |
       1. Build the operator image into staging ECR.
@@ -1013,7 +1015,7 @@ arm-ubuntu-int-test-workflow-rehearsal:
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_UBUNTU_INTEGRATION
     JOB_INT_TEST_PROFILE: managersecret
     BUILD_IMAGE_REF_FILE: rehearsal/arm-ubuntu-build-test-push-workflow-image-ref.txt
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This workflow now has a concrete ARM Ubuntu integration contract. It consumes the matching staging build artifact in the same pipeline and uses the staging enterprise image explicitly rather than an inherited production prefix.
     WORKFLOW_PLAN: |
       1. Build the ARM Ubuntu operator image into staging ECR.
@@ -1064,7 +1066,7 @@ arm-rhel-int-test-workflow-rehearsal:
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_RHEL_INTEGRATION
     JOB_INT_TEST_PROFILE: managersecret
     BUILD_IMAGE_REF_FILE: rehearsal/arm-rhel-build-test-push-workflow-image-ref.txt
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This workflow now has a concrete ARM RHEL integration contract. It consumes the matching staging build artifact in the same pipeline and uses the staging enterprise image explicitly.
     WORKFLOW_PLAN: |
       1. Build the ARM RHEL operator image into staging ECR.
@@ -1115,7 +1117,7 @@ arm-al2023-int-test-workflow-rehearsal:
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_AL2023_INTEGRATION
     JOB_INT_TEST_PROFILE: managersecret
     BUILD_IMAGE_REF_FILE: rehearsal/arm-al2023-build-test-push-workflow-image-ref.txt
-    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
     WORKFLOW_NOTES: This workflow now has a concrete ARM AL2023 integration contract. It consumes the matching staging build artifact in the same pipeline and uses the staging enterprise image explicitly.
     WORKFLOW_PLAN: |
       1. Build the ARM AL2023 operator image into staging ECR.
@@ -1154,7 +1156,7 @@ pre-release-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/pre-release-workflow.yml
     WORKFLOW_CLASS: release-preparation
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_PRE_RELEASE
-    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET
     WORKFLOW_NOTES: This workflow mutates release artifacts and versioned outputs. Rehearsal execution must target staging-only release destinations.
     WORKFLOW_PLAN: |
       1. Generate pre-release artifacts and version bumps only in a staging branch or disposable project.
@@ -1174,7 +1176,7 @@ automated-release-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/automated-release-workflow.yml
     WORKFLOW_CLASS: release-publication
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_AUTOMATED_RELEASE
-    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_RELEASE_BUCKET,STAGING_RELEASE_NOTES_TARGET
     WORKFLOW_NOTES: The GitHub workflow publishes RC and release images. Until the later pre-release and release migration is implemented, GitLab rehearsal execution must stay on internal staging release registries only and must not touch DockerHub or public ECR names. Cosign signing remains deliberately deferred in this dry-run slice.
     WORKFLOW_PLAN: |
       1. Build RC and final release images only in internal staging release registries.
@@ -1195,7 +1197,7 @@ psr-release-qualification-rehearsal:
     SOURCE_WORKFLOW_FILE: psr/k8s-operator
     WORKFLOW_CLASS: release-qualification-psr
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_PSR_RELEASE
-    REQUIRED_VARS: STAGING_PSR_BASE_VERSION,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    REQUIRED_VARS: STAGING_PSR_BASE_VERSION
     WORKFLOW_NOTES: PSR is the long-running release-quality gate for upgrade, app-framework, and performance coverage. The GitLab release lane should gather the exact PSR trigger matrix before RC-to-GA approval.
     WORKFLOW_PLAN: |
       1. Prepare the PSR trigger matrix for upgrade, app-framework, and performance scenarios.
