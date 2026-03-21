@@ -178,10 +178,10 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
         [
             (env.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE"), "env.SPLUNK_ENTERPRISE_RELEASE_IMAGE"),
             (cycle_contract.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE"), "cycle.SPLUNK_ENTERPRISE_RELEASE_IMAGE"),
+            (dotenv.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE"), "dotenv.SPLUNK_ENTERPRISE_RELEASE_IMAGE"),
             (env.get("SPLUNK_ENTERPRISE_IMAGE"), "env.SPLUNK_ENTERPRISE_IMAGE"),
             (cycle_contract.get("SPLUNK_ENTERPRISE_IMAGE"), "cycle.SPLUNK_ENTERPRISE_IMAGE"),
             (env.get("STAGING_SPLUNK_ENTERPRISE_IMAGE"), "env.STAGING_SPLUNK_ENTERPRISE_IMAGE"),
-            (dotenv.get("SPLUNK_ENTERPRISE_RELEASE_IMAGE"), "dotenv.SPLUNK_ENTERPRISE_RELEASE_IMAGE"),
             (dotenv.get("RELATED_IMAGE_SPLUNK_ENTERPRISE"), "dotenv.RELATED_IMAGE_SPLUNK_ENTERPRISE"),
         ]
     )
