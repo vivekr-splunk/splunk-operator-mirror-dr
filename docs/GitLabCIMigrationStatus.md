@@ -128,6 +128,9 @@
   - `qualification-report-rehearsal`
   - `compatibility-publish-rehearsal`
   - `cla-check-intake-note`
+  - `github-intake-automation-rehearsal`
+  - `github-mirror-health-check-rehearsal`
+  - `rollback-rehearsal`
 - Actually executed and proven in group rehearsal:
   - `format-and-vet`
   - `bias-language`
@@ -180,6 +183,9 @@
     - still need first live proof runs in the group project
 - release promotion to official public destinations
 - final production release-branch creation and real `release/<version> -> main` MR mutation
+- first live proof for the new GitHub intake automation validation job
+- first live proof for the read-only GitHub mirror health check job
+- first live proof for the rollback rehearsal packet job
 - Executed but still under stabilization:
   - namespace-scope/manual/nightly EKS variants
     - the first real MR run entered those jobs and exposed an under-partitioned runtime shape
@@ -213,7 +219,9 @@ Interpretation:
 - Red Hat preflight bundle and container certification execution
 - OperatorHub and Red Hat ecosystem submission automation
 - public-registry publication for pre-release and release workflows
-- GitHub intake automation replacement
+- executable GitHub issue and PR intake automation replacement still needs first end-to-end proof from the mirrored GitHub surface
+- GitHub mirror health still needs a disposable mirror target before it can count as a full rehearsal
+- rollback drill still needs a timed live execution window beyond the generated rehearsal packet
 
 ## Notes
 
@@ -286,6 +294,20 @@ Interpretation:
 - The source GitHub workflow name `merge-develop-to-main-workflow.yml` is retained only for traceability. The GitLab equivalent is named `release-branch-to-main-rehearsal` and models the future-state behavior:
   - cut `release/<version>` from an approved `develop` commit
   - create an MR from `release/<version>` to `main`
+- GitHub intake automation is no longer only a paper plan in this repo:
+  - checked-in GitHub-side workflows now exist:
+    - `.github/workflows/github-intake-issue.yml`
+    - `.github/workflows/github-intake-pr.yml`
+  - checked-in reusable intake helpers now exist:
+    - `hack/github-intake/lib/intake-common.sh`
+    - `hack/github-intake/issue-intake.sh`
+    - `hack/github-intake/pr-intake.sh`
+  - GitLab-side validation and control jobs now exist:
+    - `github-intake-automation-rehearsal`
+    - `github-mirror-health-check-rehearsal`
+    - `rollback-rehearsal`
+  - the intake validation and rollback packet jobs are enabled in the group rehearsal project
+  - the mirror health-check job remains disabled until a deliberate mirror target is loaded
 - The workflow-rehearsal scaffold now emits a dedicated `context.txt` artifact for each job with safe CI metadata:
   - observed timestamp
   - pipeline mode

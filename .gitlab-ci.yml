@@ -1280,6 +1280,65 @@ cla-check-intake-note:
       2. Ensure the GitHub intake workflow never becomes an authoritative merge gate after cutover.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/cla-check-intake-note.sh
 
+github-intake-automation-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .intake-family
+    - .rules-mr-only
+  variables:
+    WORKFLOW_SLUG: github-intake-automation
+    WORKFLOW_NAME: GitHub Intake Automation Rehearsal
+    SOURCE_WORKFLOW_FILE: .github/workflows/github-intake-issue.yml,.github/workflows/github-intake-pr.yml
+    WORKFLOW_CLASS: github-intake-automation
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_GITHUB_INTAKE_AUTOMATION
+    REQUIRED_VARS: ""
+    WORKFLOW_NOTES: Post-cutover GitHub intake must remain metadata-only. The GitHub issue and PR workflows should create linked GitLab records without ever becoming an authoritative merge path.
+    WORKFLOW_PLAN: |
+      1. Validate the checked-in GitHub issue intake workflow.
+      2. Validate the checked-in GitHub PR intake workflow.
+      3. Ensure the PR intake path uses pull_request_target with trusted base-repository checkout only.
+      4. Keep GitHub and GitLab mutation disabled in the GitLab-side rehearsal validation job.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/github-intake-automation-rehearsal.sh
+
+github-mirror-health-check-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .administration-family
+    - .rules-release-train-or-web-manual
+  variables:
+    WORKFLOW_SLUG: github-mirror-health-check
+    WORKFLOW_NAME: GitHub Mirror Health Check Rehearsal
+    SOURCE_WORKFLOW_FILE: gitlab-push-mirror
+    WORKFLOW_CLASS: github-mirror
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_GITHUB_MIRROR_CHECK
+    REQUIRED_VARS: STAGING_GITHUB_MIRROR_REPO
+    WORKFLOW_NOTES: GitLab must become the authoritative source while GitHub stays a downstream mirror. This rehearsal job performs only read-only parity checks against the configured GitHub repository.
+    WORKFLOW_PLAN: |
+      1. Read branch parity from the configured GitHub mirror target.
+      2. Compare GitHub refs to the current GitLab repository refs.
+      3. Record drift without mutating GitHub mirror settings.
+      4. Reserve mirror enable, disable, and repair actions for the dedicated rollback drill.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/mirror-health-check.sh
+
+rollback-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .administration-family
+    - .rules-release-train-or-web-manual
+  variables:
+    WORKFLOW_SLUG: rollback-rehearsal
+    WORKFLOW_NAME: Rollback Rehearsal
+    SOURCE_WORKFLOW_FILE: cutover-rollback-runbook
+    WORKFLOW_CLASS: rollback
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_ROLLBACK_REHEARSAL
+    REQUIRED_VARS: ""
+    WORKFLOW_NOTES: Rollback must be rehearsed with explicit timing, owners, and evidence before production migration can be approved.
+    WORKFLOW_PLAN: |
+      1. Generate the rollback decision checklist and command log packet.
+      2. Record the target recovery window and mirror target.
+      3. Keep the rehearsal evidence-only unless a dedicated rollback execution window is approved.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/rollback-rehearsal.sh
+
 qualification-report-rehearsal:
   extends:
     - .administration-family
