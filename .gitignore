@@ -109,3 +109,5 @@ test/secret/*.log
 kubeconfig
 .devcontainer/devcontainer.json
 kuttl-artifacts/*
+__pycache__/
+public/

@@ -32,7 +32,12 @@
   - `lane-select-rehearsal`
   - `qualification-report-rehearsal`
   - `compatibility-publish-rehearsal`
+  - `pages`
   - these jobs create a checked-in release-cycle contract instead of relying only on ad hoc `STAGING_*` flags
+  - `pages` is now the standard live-status publication path for release and qualification cycles:
+    - it publishes a small GitLab Pages dashboard plus raw controller JSON and Markdown
+    - Confluence is intentionally kept out of the runtime status loop
+    - Slack remains informational and points people back to GitLab-native status
 - Release and qualification controller documentation now exists in:
   - `docs/GitLabReleaseQualificationController.md`
   - use that document to understand the checked-in cycle manifest, lane selection, PSR verdict capture, qualification artifacts, and compatibility publication plan
@@ -195,6 +200,7 @@
 - first live proof for the read-only GitHub mirror health check job
 - first live proof for the rollback rehearsal packet job
 - first live proof for the Slack notification job
+- first live proof for the GitLab Pages status dashboard job
 - Executed but still under stabilization:
   - namespace-scope/manual/nightly EKS variants
     - the first real MR run entered those jobs and exposed an under-partitioned runtime shape
@@ -333,10 +339,23 @@ Interpretation:
 - Slack notification is now modeled explicitly in the product repo using the same internal pattern shape already used by shared CI templates:
   - the configured rehearsal channel is `sok-gitlab-ci-alerts`
   - the notifier is wired as a non-authoritative final-stage job
+  - it now reads the release-controller outputs so the message includes:
+    - cycle id
+    - selected lane
+    - qualification disposition
+    - next action
   - the current rehearsal project now carries the non-secret channel variables:
     - `STAGING_SLACK_CHANNEL=sok-gitlab-ci-alerts`
     - `STAGING_SLACK_SCHEDULE_CHANNEL=sok-gitlab-ci-alerts`
   - live delivery remains disabled until a dedicated `STAGING_SLACK_TOKEN` is loaded
+- GitLab Pages is now the standard live-status surface for release and qualification:
+  - the `pages` job runs in the final notification stage
+  - it publishes:
+    - `public/index.html`
+    - `public/status.json`
+    - copied raw controller files under `public/data/`
+  - it reads the checked-in cycle file, lane selection, compatibility record, blocker summary, and PSR verdict when present
+  - it is intentionally informational for now and does not block release disposition if the status page itself fails
 - The workflow-rehearsal scaffold now emits a dedicated `context.txt` artifact for each job with safe CI metadata:
   - observed timestamp
   - pipeline mode

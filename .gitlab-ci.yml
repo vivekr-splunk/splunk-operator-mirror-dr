@@ -1435,6 +1435,12 @@ slack-notify-rehearsal:
     - .python-controller-bootstrap
     - .rules-qualification-or-release-train-or-web-manual
   when: always
+  needs:
+    - job: compatibility-publish-rehearsal
+      artifacts: true
+      optional: true
+  dependencies:
+    - compatibility-publish-rehearsal
   variables:
     WORKFLOW_SLUG: slack-notify
     WORKFLOW_NAME: Slack Notification Rehearsal
@@ -1449,6 +1455,34 @@ slack-notify-rehearsal:
       3. Post to the configured post-merge or schedule channel only when the Slack token is loaded.
       4. Keep notification delivery informational and non-authoritative.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/slack-notify-rehearsal.py
+
+pages:
+  extends:
+    - .notification-family
+    - .python-controller-bootstrap
+    - .rules-qualification-or-release-train-or-web-manual
+  when: always
+  allow_failure: true
+  needs:
+    - job: lane-select-rehearsal
+      artifacts: true
+    - job: qualification-report-rehearsal
+      artifacts: true
+      optional: true
+    - job: compatibility-publish-rehearsal
+      artifacts: true
+      optional: true
+  dependencies:
+    - lane-select-rehearsal
+    - qualification-report-rehearsal
+    - compatibility-publish-rehearsal
+  script:
+    - python3 hack/gitlab-ci/status-pages-rehearsal.py
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - public
 
 qualification-report-rehearsal:
   extends:

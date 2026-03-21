@@ -8,6 +8,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from lib.status_contract import load_optional_json
+
 
 def api_headers() -> dict[str, str]:
     private_token = os.getenv("STAGING_GITLAB_API_TOKEN", "").strip()
@@ -64,23 +66,60 @@ def gather_failed_jobs() -> list[dict]:
     ]
 
 
-def build_payload(channel: str, failed_jobs: list[dict]) -> dict:
+def load_release_controller_status() -> dict[str, dict] | None:
+    controller_dir = Path.cwd() / "rehearsal" / "release-controller"
+    manifest = load_optional_json(controller_dir / "release-cycle-manifest.json")
+    lane_selection = load_optional_json(controller_dir / "lane-selection.json")
+    compatibility = load_optional_json(controller_dir / "compatibility-record.json")
+    publish_plan = load_optional_json(controller_dir / "compatibility-publish-plan.json")
+    if not isinstance(manifest, dict) or not isinstance(lane_selection, dict):
+        return None
+    return {
+        "manifest": manifest,
+        "lane_selection": lane_selection,
+        "compatibility": compatibility if isinstance(compatibility, dict) else {},
+        "publish_plan": publish_plan if isinstance(publish_plan, dict) else {},
+    }
+
+
+def build_payload(channel: str, failed_jobs: list[dict], status_context: dict[str, dict] | None) -> dict:
     project = os.getenv("CI_PROJECT_PATH", "unknown-project")
     pipeline_url = os.getenv("CI_PIPELINE_URL", "unknown")
     ref_name = os.getenv("CI_COMMIT_REF_NAME", "unknown")
     pipeline_mode = os.getenv("REHEARSAL_PIPELINE_MODE", "full")
     source = os.getenv("CI_PIPELINE_SOURCE", "unknown")
     sha = os.getenv("CI_COMMIT_SHA", "unknown")[:8]
+    cycle_id = "unversioned-cycle"
+    lane = "unknown"
+    disposition = "in progress"
+    next_action = "await-controller-output"
+    if status_context:
+        manifest = status_context["manifest"]
+        lane_selection = status_context["lane_selection"]
+        compatibility = status_context["compatibility"]
+        publish_plan = status_context["publish_plan"]
+        cycle_id = manifest.get("source", {}).get("cycle_id", cycle_id)
+        lane = lane_selection.get("selected_lane", lane)
+        disposition = compatibility.get("disposition", disposition)
+        next_action = publish_plan.get("next_action", next_action)
 
-    status_label = "FAILED" if failed_jobs else "SUCCESS"
+    if failed_jobs:
+        status_label = "BLOCKED"
+    elif disposition != "in progress":
+        status_label = disposition.upper()
+    else:
+        status_label = "SUCCESS"
     intro = (
         f"*SOK GitLab rehearsal notification*\n"
         f"- Project: `{project}`\n"
+        f"- Cycle: `{cycle_id}`\n"
+        f"- Lane: `{lane}`\n"
         f"- Ref: `{ref_name}` `{sha}`\n"
         f"- Source: `{source}`\n"
         f"- Mode: `{pipeline_mode}`\n"
         f"- Pipeline: {pipeline_url}\n"
-        f"- Status: *{status_label}*"
+        f"- Status: *{status_label}*\n"
+        f"- Next action: `{next_action}`"
     )
 
     blocks: list[dict] = [
@@ -105,7 +144,10 @@ def build_payload(channel: str, failed_jobs: list[dict]) -> dict:
         blocks.append(
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": "No failed non-allow-failure jobs were detected when the notification ran."},
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"No failed non-allow-failure jobs were detected when the notification ran.\nCurrent disposition: `{disposition}`",
+                },
             }
         )
 
@@ -122,8 +164,9 @@ def main() -> int:
     failures_file = rehearsal_dir / f"{work_slug}-failed-jobs.json"
 
     failed_jobs = gather_failed_jobs()
+    status_context = load_release_controller_status()
     channel = choose_channel()
-    payload = build_payload(channel, failed_jobs)
+    payload = build_payload(channel, failed_jobs, status_context)
 
     payload_file.write_text(json.dumps(payload, indent=2))
     failures_file.write_text(json.dumps(failed_jobs, indent=2))
@@ -134,6 +177,10 @@ def main() -> int:
                 f"failed_job_count={len(failed_jobs)}",
                 f"pipeline_source={os.getenv('CI_PIPELINE_SOURCE', 'unknown')}",
                 f"pipeline_mode={os.getenv('REHEARSAL_PIPELINE_MODE', 'full')}",
+                f"cycle_id={(status_context or {}).get('manifest', {}).get('source', {}).get('cycle_id', 'unversioned-cycle')}",
+                f"selected_lane={(status_context or {}).get('lane_selection', {}).get('selected_lane', 'unknown')}",
+                f"disposition={(status_context or {}).get('compatibility', {}).get('disposition', 'in progress')}",
+                f"next_action={(status_context or {}).get('publish_plan', {}).get('next_action', 'await-controller-output')}",
             ]
         )
         + "\n"
