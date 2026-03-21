@@ -35,7 +35,7 @@
   - these jobs create a checked-in release-cycle contract instead of relying only on ad hoc `STAGING_*` flags
 - Release and qualification controller documentation now exists in:
   - `docs/GitLabReleaseQualificationController.md`
-  - use that document to understand the checked-in cycle manifest, lane selection, qualification artifacts, and compatibility publication plan
+  - use that document to understand the checked-in cycle manifest, lane selection, PSR verdict capture, qualification artifacts, and compatibility publication plan
 - The GitLab CI structure has now been refactored into reusable workflow families instead of continuing to grow as one job per legacy GitHub workflow:
   - shared rule families for:
     - core CI
@@ -147,6 +147,10 @@
   - `bundle-push-post-release-rehearsal`
   - `release-charts-workflow-rehearsal`
   - `release-branch-to-main-rehearsal`
+- Release controller evidence has now been tightened for PSR:
+  - `psr-release-qualification-dispatch` already triggers the downstream `psr/k8s-operator` pipeline
+  - `psr-release-qualification-collect` now records the downstream bridge URL, pipeline URL, and verdict into `rehearsal/release-controller/`
+  - `qualification-report-rehearsal` now includes the PSR verdict section when that evidence exists
 - Present in the modularized graph but not yet executed end to end:
   - release and qualification controller family
     - manifest resolve, lane select, qualification report, and compatibility publish are now implemented in the product repo

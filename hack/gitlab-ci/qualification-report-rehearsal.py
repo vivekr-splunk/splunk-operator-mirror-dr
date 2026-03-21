@@ -34,6 +34,12 @@ def load_job_artifacts(rehearsal_dir: Path) -> list[dict[str, str]]:
     return rows
 
 
+def load_optional_json(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def main() -> int:
     rehearsal_dir = Path.cwd() / "rehearsal"
     output_dir = rehearsal_dir / "release-controller"
@@ -42,6 +48,7 @@ def main() -> int:
     manifest = json.loads((output_dir / "release-cycle-manifest.json").read_text(encoding="utf-8"))
     lane_selection = json.loads((output_dir / "lane-selection.json").read_text(encoding="utf-8"))
     jobs = load_job_artifacts(rehearsal_dir)
+    psr_verdict = load_optional_json(output_dir / "psr-qualification-verdict.json")
     evidence_job_names = [
         job
         for job in lane_selection.get("next_jobs", [])
@@ -91,6 +98,13 @@ def main() -> int:
         "blocked_jobs": blocked,
         "missing_jobs": missing,
     }
+    if psr_verdict:
+        compatibility["psr_verdict"] = {
+            "verdict": psr_verdict.get("verdict", "unknown"),
+            "bridge_status": psr_verdict.get("bridge_status", "unknown"),
+            "downstream_pipeline_status": psr_verdict.get("downstream_pipeline_status", "unknown"),
+            "downstream_pipeline_url": psr_verdict.get("downstream_pipeline_url", ""),
+        }
     qualification_manifest = {
         "schema_version": "v1alpha1",
         "cycle_id": manifest["source"]["cycle_id"],
@@ -123,6 +137,9 @@ def main() -> int:
         "blocked_jobs": blocked,
         "missing_jobs": missing,
     }
+    if psr_verdict and psr_verdict.get("verdict") not in {"passed", "pending"}:
+        blocker_summary["bucket_counts"]["test"] += 1
+        blocker_summary["psr_verdict"] = psr_verdict
     (output_dir / "qualification-manifest.json").write_text(
         json.dumps(qualification_manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -154,6 +171,18 @@ def main() -> int:
                 f"- cycle_id: {manifest['source']['cycle_id']}",
                 f"- linked_splrel: {manifest['governance']['linked_splrel']}",
                 f"- linked_rdmp: {manifest['governance']['linked_rdmp']}",
+                "",
+                "## PSR Verdict",
+                *(
+                    [
+                        f"- verdict: {psr_verdict.get('verdict', 'unknown')}",
+                        f"- bridge_status: {psr_verdict.get('bridge_status', 'unknown')}",
+                        f"- downstream_pipeline_status: {psr_verdict.get('downstream_pipeline_status', 'unknown')}",
+                        f"- downstream_pipeline_url: {psr_verdict.get('downstream_pipeline_url') or 'unavailable'}",
+                    ]
+                    if psr_verdict
+                    else ["- none"]
+                ),
                 "",
                 "## Executed Jobs",
                 *([f"- {job}" for job in executed] or ["- none"]),

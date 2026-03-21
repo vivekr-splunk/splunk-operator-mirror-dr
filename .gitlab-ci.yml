@@ -1204,6 +1204,22 @@ psr-release-qualification-dispatch:
     forward:
       pipeline_variables: true
 
+psr-release-qualification-collect:
+  extends:
+    - .administration-family
+    - .required-rehearsal
+    - .python-controller-bootstrap
+    - .rules-release-train-or-web-manual
+  needs:
+    - job: psr-release-qualification-dispatch
+  script:
+    - python3 hack/gitlab-ci/psr-release-qualification-collect.py
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/release-controller/
+
 bundle-push-post-release-rehearsal:
   extends:
     - .workflow-rehearsal-template
@@ -1438,6 +1454,9 @@ qualification-report-rehearsal:
     - job: automated-release-workflow-rehearsal
       artifacts: true
       optional: true
+    - job: psr-release-qualification-collect
+      artifacts: true
+      optional: true
     - job: psr-release-qualification-rehearsal
       artifacts: true
       optional: true
@@ -1464,6 +1483,7 @@ qualification-report-rehearsal:
     - helm-test-workflow-rehearsal
     - pre-release-workflow-rehearsal
     - automated-release-workflow-rehearsal
+    - psr-release-qualification-collect
     - psr-release-qualification-rehearsal
     - bundle-push-post-release-rehearsal
     - release-charts-workflow-rehearsal
