@@ -71,9 +71,14 @@ require_envs \
   STAGING_SPLUNK_ENTERPRISE_IMAGE
 
 gcp_auth_mode="service-account-key"
-if gcp_oidc_ready; then
+if [ -n "${STAGING_GCP_SERVICE_ACCOUNT_KEY:-}" ]; then
+  gcp_auth_mode="service-account-key"
+elif gcp_oidc_ready; then
   gcp_auth_mode="oidc"
 else
+  require_envs STAGING_GCP_SERVICE_ACCOUNT_KEY
+fi
+if [ "${gcp_auth_mode}" = "service-account-key" ]; then
   require_envs STAGING_GCP_SERVICE_ACCOUNT_KEY
   materialize_json_secret "${STAGING_GCP_SERVICE_ACCOUNT_KEY}" "${gcp_key_file}"
 fi

@@ -75,10 +75,10 @@ azure_tenant_id=""
 azure_subscription_id=""
 azure_auth_mode="acr-basic"
 
-if azure_oidc_ready; then
-  azure_auth_mode="oidc"
-elif [ -n "${STAGING_AZURE_CREDENTIALS:-}" ]; then
+if [ -n "${STAGING_AZURE_CREDENTIALS:-}" ]; then
   azure_auth_mode="service-principal"
+elif azure_oidc_ready; then
+  azure_auth_mode="oidc"
 fi
 
 if [ -n "${STAGING_AKS_KUBECONFIG:-}" ]; then
