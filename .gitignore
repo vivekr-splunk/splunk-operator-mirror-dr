@@ -90,6 +90,7 @@ clair-scanner
 clair-scanner-logs
 release-*
 !hack/gitlab-ci/release-manifest-resolve-rehearsal.py
+!hack/gitlab-ci/release-branch-to-main-rehearsal.sh
 deploy/olm-certified
 *junit.xml
 # Bias Language Linter

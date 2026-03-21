@@ -21,7 +21,7 @@ def main() -> int:
             "automated-release-workflow-rehearsal",
             "release-charts-workflow-rehearsal",
             "bundle-push-post-release-rehearsal",
-            "merge-develop-to-main-workflow-rehearsal",
+            "release-branch-to-main-rehearsal",
         ]
         approval_gate = "rc-to-ga-promotion"
     else:

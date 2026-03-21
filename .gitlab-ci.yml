@@ -1186,15 +1186,15 @@ release-charts-workflow-rehearsal:
     paths:
       - rehearsal/
 
-merge-develop-to-main-workflow-rehearsal:
+release-branch-to-main-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .administration-family
     - .needs-release-controller
     - .rules-release-train-or-web-manual
   variables:
-    WORKFLOW_SLUG: merge-develop-to-main-workflow
-    WORKFLOW_NAME: Merge Develop To Main Workflow
+    WORKFLOW_SLUG: release-branch-to-main-workflow
+    WORKFLOW_NAME: Release Branch To Main Governance Workflow
     SOURCE_WORKFLOW_FILE: .github/workflows/merge-develop-to-main-workflow.yml
     WORKFLOW_CLASS: release-governance
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_MERGE_DEVELOP_TO_MAIN
@@ -1205,7 +1205,7 @@ merge-develop-to-main-workflow-rehearsal:
       2. Create a GitLab MR from release/<version> to main instead of a direct develop-to-main GitHub PR.
       3. Validate mergeability and release metadata generation without pushing public artifacts.
       4. Keep RC image publication confined to staging release repositories.
-    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/merge-develop-to-main-workflow-rehearsal.sh
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/release-branch-to-main-rehearsal.sh
 
 cla-check-intake-note:
   extends:

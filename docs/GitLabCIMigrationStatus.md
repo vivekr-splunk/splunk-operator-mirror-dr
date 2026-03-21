@@ -111,7 +111,7 @@
   - `automated-release-workflow-rehearsal`
   - `bundle-push-post-release-rehearsal`
   - `release-charts-workflow-rehearsal`
-  - `merge-develop-to-main-workflow-rehearsal`
+  - `release-branch-to-main-rehearsal`
   - `release-manifest-resolve-rehearsal`
   - `lane-select-rehearsal`
   - `qualification-report-rehearsal`
@@ -132,7 +132,7 @@
   - `automated-release-workflow-rehearsal`
   - `bundle-push-post-release-rehearsal`
   - `release-charts-workflow-rehearsal`
-  - `merge-develop-to-main-workflow-rehearsal`
+  - `release-branch-to-main-rehearsal`
 - Present in the modularized graph but not yet executed end to end:
   - release and qualification controller family
     - manifest resolve, lane select, qualification report, and compatibility publish are now implemented in the product repo
@@ -151,7 +151,7 @@
       - `205852799` `automated-release-workflow-rehearsal`: `success`
       - `205852800` `bundle-push-post-release-rehearsal`: `success`
       - `205852801` `release-charts-workflow-rehearsal`: `success`
-      - `205852802` `merge-develop-to-main-workflow-rehearsal`: `success`
+      - `205852802` `release-branch-to-main-rehearsal`: `success`
 - Present in the modularized graph but not yet executed end to end:
   - Azure integration family
     - concrete runtime script now exists
@@ -241,7 +241,7 @@ Interpretation:
 - The qualification controller no longer treats missing downstream evidence as a pass:
   - if build, scan, integration, or Helm artifacts are absent, the disposition remains `qualified with caveats`
   - the report now records the missing jobs explicitly instead of producing a false-green summary
-- The source GitHub workflow name `merge-develop-to-main-workflow.yml` is retained only for traceability. The GitLab equivalent now models the future-state behavior:
+- The source GitHub workflow name `merge-develop-to-main-workflow.yml` is retained only for traceability. The GitLab equivalent is named `release-branch-to-main-rehearsal` and models the future-state behavior:
   - cut `release/<version>` from an approved `develop` commit
   - create an MR from `release/<version>` to `main`
 - The workflow-rehearsal scaffold now emits a dedicated `context.txt` artifact for each job with safe CI metadata:

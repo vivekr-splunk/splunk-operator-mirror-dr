@@ -57,7 +57,7 @@ RC_TITLE=Release ${release_version} RC${rc_version}
 EOF
 
 cat > "${summary_file}" <<EOF
-Prepared a release-branch->main release-governance dry run.
+Prepared a release-branch-to-main release-governance dry run.
 
 - release_version: ${release_version}
 - enterprise_version: ${enterprise_version}
