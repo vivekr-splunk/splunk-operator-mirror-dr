@@ -37,11 +37,19 @@ The release-process review changes the target from a single quarterly-style rele
 That means the final GitLab pipeline cannot be only a direct translation of the old GitHub release workflows.
 It must support both qualification and product release as first-class lanes.
 
+## Develop Check-In Rule
+
+The release train must not become the default `develop` pipeline.
+
+- `develop` push pipelines stay fast and developer-oriented
+- release-train stages run from the controller-driven qualification lane, the product-release lane, `main`, `release/<version>`, or explicit release triggers
+- MR pipelines can stay broader than `develop` pushes, but they still exclude the product-release train
+
 ## Source Workflow Mapping
 
 The current GitHub release family is split across these files:
 
-- `merge-develop-to-main-workflow.yml`
+- `merge-develop-to-main-workflow.yml` as the legacy source workflow name
 - `pre-release-workflow.yml`
 - `automated-release-workflow.yml`
 - `release.yml`
@@ -112,7 +120,7 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
 ### 1. Release Governance
 
 - source:
-  - `merge-develop-to-main-workflow.yml`
+  - legacy source reference: `merge-develop-to-main-workflow.yml`
 - target:
   - create `release/<version>` from an approved `develop` commit
   - create a GitLab MR from `release/<version>` to `main`
@@ -133,7 +141,7 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
 ### 3. RC Build And Validation
 
 - source:
-  - `merge-develop-to-main-workflow.yml`
+  - legacy source reference: `merge-develop-to-main-workflow.yml`
   - `automated-release-workflow.yml`
 - target:
   - build RC UBI and distroless images
@@ -207,6 +215,7 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
 - GitLab is the authoritative release control plane.
 - `splunk-operator` is the authoritative release project, not just the source project.
 - Qualification should be cheaper than release and should be the default monthly path.
+- `develop` push should remain a fast check-in lane and must not be forced through the release train.
 - Public DockerHub or public ECR publication must never happen before GitLab has produced the canonical release result.
 - PSR is a release-quality gate, not a post-release report.
 - RC and final release promotion should be one linked GitLab release train, not separate manual islands unless governance requires a manual approval gate.

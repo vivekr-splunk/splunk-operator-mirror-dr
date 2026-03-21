@@ -36,6 +36,40 @@ So the answer is:
 - coverage review: yes
 - production-grade modular final state: not yet
 
+## Repository Model Decision
+
+The target repository model is single-repo.
+
+- `splunk-operator` must end up containing the authoritative implementation, CI, runtime-test, and release-train automation.
+- A separate testing or release-control repository is not the desired steady state for this migration.
+- Internal repos such as `splunk-operator-cicd` are reference inputs only:
+  - useful for credential patterns
+  - useful for timeout and runner patterns
+  - useful for release-train ideas
+  - not the target ownership model
+
+That means the production-grade cleanup should optimize for:
+
+- shared hidden templates in `.gitlab-ci.yml`
+- checked-in runtime scripts under `hack/gitlab-ci/`
+- optionally checked-in local includes or child-pipeline files in the same repo
+- minimal duplicated workflow logic
+
+It should not optimize for:
+
+- a separate implementation repo and testing repo split
+- release orchestration living in a different day-to-day control repository
+
+## Branch And Trigger Model
+
+The target execution model is not “run everything on every branch.”
+
+- `feature/*` work merges into `develop`
+- `develop` push is the fast check-in lane
+- MR pipelines remain broader than `develop` pushes
+- `main`, `release/<version>`, and controller-triggered lanes carry the heavier qualification and release work
+- the product-release train must stay out of normal `develop` and MR pipelines
+
 ## Structural Refactor Status
 
 The GitLab CI file has now moved one step closer to the desired production model.
@@ -87,6 +121,7 @@ It is still not the final state, but the file is now being organized around work
 - `bundle-push-post-release.yml`
 - `release.yml`
 - `merge-develop-to-main-workflow.yml`
+  - legacy source workflow name only; the GitLab target is `release-branch-to-main-rehearsal`
 - `cla-check.yml`
 
 ### Intentionally Merged Into Shared GitLab Jobs Instead Of One-To-One Workflow Jobs
@@ -160,6 +195,7 @@ This is its own runtime family and should not be modeled as a release job.
 
 - `pre-release-workflow.yml`
 - `merge-develop-to-main-workflow.yml`
+  - legacy source name only; GitLab uses `release/<version> -> main`
 - `automated-release-workflow.yml`
 - `release.yml`
 - `bundle-push-post-release.yml`
@@ -182,6 +218,7 @@ This should remain on the GitHub public intake surface, not in the GitLab author
 - The build, Trivy, EKS integration, and Helm runtime paths are now real executable code, not only placeholders.
 - The CI uses internal images and internal registry-first behavior, which is closer to the desired production posture.
 - GitHub-only workflows like bias-language, `kubectl-splunk`, and prodsec are already being collapsed into shared GitLab jobs, which reduces duplication.
+- The direction of travel is already toward a single GitLab project that owns both implementation and validation logic.
 
 ## What Is Not Yet Production-Grade
 
