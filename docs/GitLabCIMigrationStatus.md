@@ -216,7 +216,7 @@ Interpretation:
 - cosign signing execution for release-focused workflows
 - remaining runtime stabilization for the partitioned EKS variants
 - release, bundle, and chart publication execution against staging destinations
-- PSR release qualification trigger and verdict ingestion
+- live PSR downstream completion and verdict ingestion into the qualification record
 - Red Hat preflight bundle and container certification execution
 - OperatorHub and Red Hat ecosystem submission automation
 - public-registry publication for pre-release and release workflows
@@ -280,6 +280,18 @@ Interpretation:
   - `preflight-certification-rehearsal`
   - `ecosystem-submission-rehearsal`
   - these remain staging-safe and plan-oriented until the required credentials and downstream integration contracts are approved
+- PSR release qualification now has a native GitLab bridge in addition to the checked-in matrix-planning job:
+  - `release-manifest-resolve-rehearsal` now exports `rehearsal/release-controller/release-cycle.env` as a dotenv artifact so release-stage jobs can consume normalized release inputs directly
+  - `psr-release-qualification-dispatch` is a multi-project bridge to `psr/k8s-operator`
+  - first live proof in the group rehearsal:
+    - release-train pipeline `35084265`
+    - bridge job `206131258`
+    - downstream PSR pipeline `35084292`
+  - the downstream contract now sends normalized release values:
+    - `TEST_TYPE=all`
+    - `TARGET_VERSION=3.0`
+    - `BASE_VERSION=3.0`
+  - this replaced the earlier PSR matrix-only gap and corrected an initial `BASE_VERSION=3.0.0` mismatch to the `major.minor` format expected by the PSR repo
 - The qualification controller no longer treats missing downstream evidence as a pass:
   - if build, scan, integration, or Helm artifacts are absent, the disposition remains `qualified with caveats`
   - the report now records the missing jobs explicitly instead of producing a false-green summary
