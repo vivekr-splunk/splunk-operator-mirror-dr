@@ -372,6 +372,29 @@ Interpretation:
     - this skips verify, test, and security jobs
     - it runs the release-chart rehearsal directly so chart packaging and index generation can be validated without waiting for the full MR graph
   - both runtime paths remain disabled until `STAGING_EXECUTE_BUILD_TEST_PUSH=true` is set
+- Enterprise-image source selection is now explicit in the controller and runtime scripts:
+  - `.env` now carries both:
+    - `SPLUNK_ENTERPRISE_DEVELOP_IMAGE`
+    - `SPLUNK_ENTERPRISE_RELEASE_IMAGE`
+  - normal branch and MR validation defaults to the `develop` Enterprise-image track
+  - `qualification_lane` and `release_train` resolve the `release` Enterprise-image track automatically
+  - the controller now exports:
+    - `SOK_SOURCE_MODE`
+    - `SOK_TRIGGER_KIND`
+    - `SOK_ENTERPRISE_IMAGE`
+    - `SOK_ENTERPRISE_IMAGE_SOURCE`
+    - `SOK_ENTERPRISE_DEVELOP_IMAGE`
+    - `SOK_ENTERPRISE_RELEASE_IMAGE`
+  - current rehearsal baseline for both tracks is `splunk/splunk:10.2.0`
+- Azure and GCP runtime now follow the same core contract as the older GitHub workflows:
+  - start from the resolved Enterprise source image
+  - mirror it into the provider-local private registry
+  - then deploy and run tests
+  - provider OIDC remains the preferred target auth path
+  - explicit rehearsal fallback credentials now exist because Azure and GCP trust still need correction
+  - the first corrected cloud-runtime proofs are now running on:
+    - Azure-focused pipeline `35086429`
+    - GCP-focused pipeline `35086430`
 - The long-running runtime families now support profile-driven partitioning:
   - EKS integration:
     - `STAGING_INT_TEST_PROFILE=managersecret|smoke|appframework|full|custom`
