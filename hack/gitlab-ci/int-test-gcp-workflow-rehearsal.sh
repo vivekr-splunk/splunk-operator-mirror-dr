@@ -17,6 +17,8 @@ run_log="rehearsal/${WORKFLOW_SLUG}-run.log"
 pod_log_root="rehearsal/${WORKFLOW_SLUG}-pod-logs"
 integration_junit="rehearsal/${WORKFLOW_SLUG}-inttest-junit.xml"
 gcp_key_file="$(mktemp /tmp/${WORKFLOW_SLUG}-gcp-key.XXXXXX.json)"
+gke_kubeconfig_file="$(mktemp /tmp/${WORKFLOW_SLUG}-kubeconfig.XXXXXX)"
+cluster_mode="ephemeral-gke"
 
 cleanup_and_exit() {
   rc="$1"
@@ -31,11 +33,16 @@ cleanup_and_exit() {
 
   log_step "cleanup:make-cleanup" | tee -a "${cleanup_log}" >/dev/null
   make cleanup >> "${cleanup_log}" 2>&1 || cleanup_rc=1
-  log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
-  make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
+  if [ "${cluster_mode}" = "ephemeral-gke" ]; then
+    log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
+    make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
+  else
+    log_step "cleanup:cluster-down skipped mode=${cluster_mode}" | tee -a "${cleanup_log}" >/dev/null
+  fi
   log_step "cleanup:complete cleanup_rc=${cleanup_rc}" | tee -a "${cleanup_log}" >/dev/null
 
   rm -f "${gcp_key_file}"
+  rm -f "${gke_kubeconfig_file}"
 
   if [ "${rc}" -ne 0 ]; then
     exit "${rc}"
@@ -57,12 +64,17 @@ require_envs \
   STAGING_GCP_ARTIFACT_REGISTRY \
   STAGING_GCP_SERVICE_ACCOUNT_KEY \
   STAGING_GCP_PROJECT_ID \
-  STAGING_GCP_REGION \
-  STAGING_GCP_ZONE \
   STAGING_SPLUNK_ENTERPRISE_IMAGE
 ensure_internal_image_ref "${STAGING_SPLUNK_ENTERPRISE_IMAGE}" "GCP enterprise image"
 
 materialize_json_secret "${STAGING_GCP_SERVICE_ACCOUNT_KEY}" "${gcp_key_file}"
+if [ -n "${STAGING_GKE_KUBECONFIG:-}" ]; then
+  cluster_mode="existing-gke"
+  materialize_file_secret "${STAGING_GKE_KUBECONFIG}" "${gke_kubeconfig_file}"
+  export KUBECONFIG="${gke_kubeconfig_file}"
+else
+  require_envs STAGING_GCP_REGION STAGING_GCP_ZONE
+fi
 
 operator_registry="${STAGING_GCP_ARTIFACT_REGISTRY}"
 operator_image="${operator_registry}/splunk/splunk-operator:${CI_COMMIT_SHA}"
@@ -81,9 +93,9 @@ export CLUSTER_NODES="${STAGING_GCP_CLUSTER_NODES:-2}"
 export CLUSTER_WIDE="${STAGING_GCP_CLUSTER_WIDE:-true}"
 export DEPLOYMENT_TYPE="${STAGING_GCP_DEPLOYMENT_TYPE:-manifest}"
 export GCP_PROJECT_ID="${STAGING_GCP_PROJECT_ID}"
-export GCP_REGION="${STAGING_GCP_REGION}"
-export GCP_ZONE="${STAGING_GCP_ZONE}"
-export AWS_S3_REGION="${STAGING_GCP_REGION}"
+export GCP_REGION="${STAGING_GCP_REGION:-us-west2}"
+export GCP_ZONE="${STAGING_GCP_ZONE:-us-west2-a}"
+export AWS_S3_REGION="${STAGING_GCP_REGION:-us-west2}"
 export GCP_NETWORK="${STAGING_GCP_NETWORK:-default}"
 export GCP_SUBNETWORK="${STAGING_GCP_SUBNETWORK:-default}"
 export GCP_ARTIFACT_REGISTRY="${STAGING_GCP_ARTIFACT_REGISTRY}"
@@ -118,6 +130,7 @@ docker login -u _json_key --password-stdin "${operator_registry}" < "${gcp_key_f
 log_step "gcp:registry-login:complete" | tee -a "${run_log}" >/dev/null
 
 append_context "${context_file}" "workflow" "${WORKFLOW_SLUG}"
+append_context "${context_file}" "cluster_mode" "${cluster_mode}"
 append_context "${context_file}" "cluster_provider" "${CLUSTER_PROVIDER}"
 append_context "${context_file}" "test_cluster_name" "${TEST_CLUSTER_NAME}"
 append_context "${context_file}" "cluster_workers" "${CLUSTER_WORKERS}"
@@ -137,9 +150,13 @@ log_step "gcp:build:start image=${operator_image}" | tee -a "${build_log}" >/dev
 make docker-buildx IMG="${operator_image}" >> "${build_log}" 2>&1
 log_step "gcp:build:complete" | tee -a "${build_log}" >/dev/null
 
-log_step "gcp:cluster-up:start ${TEST_CLUSTER_NAME}" | tee -a "${cluster_log}" >/dev/null
-make cluster-up 2>&1 | tee -a "${cluster_log}"
-log_step "gcp:cluster-up:complete" | tee -a "${cluster_log}" >/dev/null
+if [ "${cluster_mode}" = "ephemeral-gke" ]; then
+  log_step "gcp:cluster-up:start ${TEST_CLUSTER_NAME}" | tee -a "${cluster_log}" >/dev/null
+  make cluster-up 2>&1 | tee -a "${cluster_log}"
+  log_step "gcp:cluster-up:complete" | tee -a "${cluster_log}" >/dev/null
+else
+  log_step "gcp:cluster-up:skipped mode=${cluster_mode}" | tee -a "${cluster_log}" >/dev/null
+fi
 kubectl get nodes -o wide 2>&1 | tee -a "${cluster_log}"
 kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 

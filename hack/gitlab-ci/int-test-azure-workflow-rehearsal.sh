@@ -17,6 +17,8 @@ run_log="rehearsal/${WORKFLOW_SLUG}-run.log"
 pod_log_dir="rehearsal/${WORKFLOW_SLUG}-pod-logs"
 integration_junit="rehearsal/${WORKFLOW_SLUG}-inttest-junit.xml"
 azure_creds_file="$(mktemp /tmp/${WORKFLOW_SLUG}-azure-creds.XXXXXX.json)"
+aks_kubeconfig_file="$(mktemp /tmp/${WORKFLOW_SLUG}-kubeconfig.XXXXXX)"
+cluster_mode="ephemeral-aks"
 
 cleanup_and_exit() {
   rc="$1"
@@ -31,11 +33,16 @@ cleanup_and_exit() {
 
   log_step "cleanup:make-cleanup" | tee -a "${cleanup_log}" >/dev/null
   make cleanup >> "${cleanup_log}" 2>&1 || cleanup_rc=1
-  log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
-  make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
+  if [ "${cluster_mode}" = "ephemeral-aks" ]; then
+    log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
+    make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
+  else
+    log_step "cleanup:cluster-down skipped mode=${cluster_mode}" | tee -a "${cleanup_log}" >/dev/null
+  fi
   log_step "cleanup:complete cleanup_rc=${cleanup_rc}" | tee -a "${cleanup_log}" >/dev/null
 
   rm -f "${azure_creds_file}"
+  rm -f "${aks_kubeconfig_file}"
 
   if [ "${rc}" -ne 0 ]; then
     exit "${rc}"
@@ -57,9 +64,6 @@ require_envs \
   STAGING_AZURE_ACR_LOGIN_SERVER \
   STAGING_AZURE_ACR_DOCKER_USERNAME \
   STAGING_AZURE_ACR_DOCKER_PASSWORD \
-  STAGING_AZURE_CREDENTIALS \
-  STAGING_AZURE_RESOURCE_GROUP_NAME \
-  STAGING_AZURE_CONTAINER_REGISTRY \
   STAGING_AZURE_STORAGE_ACCOUNT \
   STAGING_AZURE_STORAGE_ACCOUNT_KEY \
   STAGING_AZURE_TEST_CONTAINER \
@@ -67,15 +71,30 @@ require_envs \
   STAGING_SPLUNK_ENTERPRISE_IMAGE
 ensure_internal_image_ref "${STAGING_SPLUNK_ENTERPRISE_IMAGE}" "Azure enterprise image"
 
-materialize_json_secret "${STAGING_AZURE_CREDENTIALS}" "${azure_creds_file}"
-azure_client_id="$(jq -r '.clientId // empty' "${azure_creds_file}")"
-azure_client_secret="$(jq -r '.clientSecret // empty' "${azure_creds_file}")"
-azure_tenant_id="$(jq -r '.tenantId // empty' "${azure_creds_file}")"
-azure_subscription_id="$(jq -r '.subscriptionId // empty' "${azure_creds_file}")"
+azure_client_id=""
+azure_client_secret=""
+azure_tenant_id=""
+azure_subscription_id=""
 
-if [ -z "${azure_client_id}" ] || [ -z "${azure_client_secret}" ] || [ -z "${azure_tenant_id}" ]; then
-  echo "Azure credentials payload is missing clientId/clientSecret/tenantId" >&2
-  exit 1
+if [ -n "${STAGING_AKS_KUBECONFIG:-}" ]; then
+  cluster_mode="existing-aks"
+  materialize_file_secret "${STAGING_AKS_KUBECONFIG}" "${aks_kubeconfig_file}"
+  export KUBECONFIG="${aks_kubeconfig_file}"
+else
+  require_envs \
+    STAGING_AZURE_CREDENTIALS \
+    STAGING_AZURE_RESOURCE_GROUP_NAME \
+    STAGING_AZURE_CONTAINER_REGISTRY
+  materialize_json_secret "${STAGING_AZURE_CREDENTIALS}" "${azure_creds_file}"
+  azure_client_id="$(jq -r '.clientId // empty' "${azure_creds_file}")"
+  azure_client_secret="$(jq -r '.clientSecret // empty' "${azure_creds_file}")"
+  azure_tenant_id="$(jq -r '.tenantId // empty' "${azure_creds_file}")"
+  azure_subscription_id="$(jq -r '.subscriptionId // empty' "${azure_creds_file}")"
+
+  if [ -z "${azure_client_id}" ] || [ -z "${azure_client_secret}" ] || [ -z "${azure_tenant_id}" ]; then
+    echo "Azure credentials payload is missing clientId/clientSecret/tenantId" >&2
+    exit 1
+  fi
 fi
 
 operator_registry="${STAGING_AZURE_ACR_LOGIN_SERVER}"
@@ -94,9 +113,9 @@ export CLUSTER_WORKERS="${STAGING_AZURE_CLUSTER_WORKERS:-5}"
 export CLUSTER_NODES="${STAGING_AZURE_CLUSTER_NODES:-2}"
 export CLUSTER_WIDE="${STAGING_AZURE_CLUSTER_WIDE:-true}"
 export DEPLOYMENT_TYPE="${STAGING_AZURE_DEPLOYMENT_TYPE:-manifest}"
-export AZURE_CONTAINER_REGISTRY="${STAGING_AZURE_CONTAINER_REGISTRY}"
+export AZURE_CONTAINER_REGISTRY="${STAGING_AZURE_CONTAINER_REGISTRY:-$(printf '%s' "${STAGING_AZURE_ACR_LOGIN_SERVER}" | cut -d. -f1)}"
 export AZURE_CONTAINER_REGISTRY_LOGIN_SERVER="${STAGING_AZURE_ACR_LOGIN_SERVER}"
-export AZURE_RESOURCE_GROUP="${STAGING_AZURE_RESOURCE_GROUP_NAME}"
+export AZURE_RESOURCE_GROUP="${STAGING_AZURE_RESOURCE_GROUP_NAME:-existing-cluster}"
 export AZURE_STORAGE_ACCOUNT="${STAGING_AZURE_STORAGE_ACCOUNT}"
 export AZURE_STORAGE_ACCOUNT_KEY="${STAGING_AZURE_STORAGE_ACCOUNT_KEY}"
 export AZURE_TEST_CONTAINER="${STAGING_AZURE_TEST_CONTAINER}"
@@ -120,6 +139,7 @@ export STORAGE_ACCOUNT_KEY="${AZURE_STORAGE_ACCOUNT_KEY}"
 export ENTERPRISE_LICENSE_LOCATION="${STAGING_AZURE_ENTERPRISE_LICENSE_LOCATION:-test_licenses}"
 
 append_context "${context_file}" "workflow" "${WORKFLOW_SLUG}"
+append_context "${context_file}" "cluster_mode" "${cluster_mode}"
 append_context "${context_file}" "cluster_provider" "${CLUSTER_PROVIDER}"
 append_context "${context_file}" "test_cluster_name" "${TEST_CLUSTER_NAME}"
 append_context "${context_file}" "cluster_workers" "${CLUSTER_WORKERS}"
@@ -135,15 +155,19 @@ append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
 append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 
-log_step "azure:auth:start" | tee -a "${run_log}" >/dev/null
-az login --service-principal \
-  --username "${azure_client_id}" \
-  --password "${azure_client_secret}" \
-  --tenant "${azure_tenant_id}" >> "${run_log}" 2>&1
-if [ -n "${azure_subscription_id}" ]; then
-  az account set --subscription "${azure_subscription_id}" >> "${run_log}" 2>&1
+if [ "${cluster_mode}" = "ephemeral-aks" ]; then
+  log_step "azure:auth:start" | tee -a "${run_log}" >/dev/null
+  az login --service-principal \
+    --username "${azure_client_id}" \
+    --password "${azure_client_secret}" \
+    --tenant "${azure_tenant_id}" >> "${run_log}" 2>&1
+  if [ -n "${azure_subscription_id}" ]; then
+    az account set --subscription "${azure_subscription_id}" >> "${run_log}" 2>&1
+  fi
+  log_step "azure:auth:complete" | tee -a "${run_log}" >/dev/null
+else
+  log_step "azure:auth:skipped mode=${cluster_mode}" | tee -a "${run_log}" >/dev/null
 fi
-log_step "azure:auth:complete" | tee -a "${run_log}" >/dev/null
 
 log_step "azure:registry-login:start ${operator_registry}" | tee -a "${run_log}" >/dev/null
 printf '%s' "${STAGING_AZURE_ACR_DOCKER_PASSWORD}" | docker login "${operator_registry}" -u "${STAGING_AZURE_ACR_DOCKER_USERNAME}" --password-stdin >> "${run_log}" 2>&1
@@ -153,9 +177,13 @@ log_step "azure:build:start image=${operator_image}" | tee -a "${build_log}" >/d
 make docker-buildx IMG="${operator_image}" >> "${build_log}" 2>&1
 log_step "azure:build:complete" | tee -a "${build_log}" >/dev/null
 
-log_step "azure:cluster-up:start ${TEST_CLUSTER_NAME}" | tee -a "${cluster_log}" >/dev/null
-make cluster-up 2>&1 | tee -a "${cluster_log}"
-log_step "azure:cluster-up:complete" | tee -a "${cluster_log}" >/dev/null
+if [ "${cluster_mode}" = "ephemeral-aks" ]; then
+  log_step "azure:cluster-up:start ${TEST_CLUSTER_NAME}" | tee -a "${cluster_log}" >/dev/null
+  make cluster-up 2>&1 | tee -a "${cluster_log}"
+  log_step "azure:cluster-up:complete" | tee -a "${cluster_log}" >/dev/null
+else
+  log_step "azure:cluster-up:skipped mode=${cluster_mode}" | tee -a "${cluster_log}" >/dev/null
+fi
 kubectl get nodes -o wide 2>&1 | tee -a "${cluster_log}"
 kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 

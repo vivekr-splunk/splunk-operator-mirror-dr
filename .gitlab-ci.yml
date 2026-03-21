@@ -846,13 +846,13 @@ int-test-azure-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/int-test-azure-workflow.yml
     WORKFLOW_CLASS: integration-azure
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_AZURE_INTEGRATION
-    REQUIRED_VARS: STAGING_AZURE_ACR_LOGIN_SERVER,STAGING_AZURE_ACR_DOCKER_USERNAME,STAGING_AZURE_ACR_DOCKER_PASSWORD,STAGING_AZURE_CREDENTIALS,STAGING_AZURE_RESOURCE_GROUP_NAME,STAGING_AZURE_CONTAINER_REGISTRY,STAGING_AZURE_STORAGE_ACCOUNT,STAGING_AZURE_STORAGE_ACCOUNT_KEY,STAGING_AZURE_TEST_CONTAINER,STAGING_AZURE_INDEXES_CONTAINER
-    WORKFLOW_NOTES: This workflow provisions and tears down AKS resources. It must stay disabled until the Azure staging credential set is loaded.
+    REQUIRED_VARS: STAGING_AZURE_ACR_LOGIN_SERVER,STAGING_AZURE_ACR_DOCKER_USERNAME,STAGING_AZURE_ACR_DOCKER_PASSWORD,STAGING_AZURE_STORAGE_ACCOUNT,STAGING_AZURE_STORAGE_ACCOUNT_KEY,STAGING_AZURE_TEST_CONTAINER,STAGING_AZURE_INDEXES_CONTAINER,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: Preferred rehearsal mode uses a protected `STAGING_AKS_KUBECONFIG` file variable for an existing AKS cluster. Full AKS lifecycle remains supported when the Azure staging credential set is loaded.
     WORKFLOW_PLAN: |
       1. Build the operator image in staging ACR only.
-      2. Provision a disposable AKS cluster in the staging resource group.
+      2. Prefer an existing staging AKS cluster via protected kubeconfig input; fall back to disposable cluster creation only when required.
       3. Run the Azure sanity integration path and collect logs.
-      4. Delete the staging AKS cluster at the end of the run.
+      4. Clean only the resources created by the rehearsal path that was actually used.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-azure-workflow-rehearsal.sh
 
 int-test-gcp-workflow-rehearsal:
@@ -866,13 +866,13 @@ int-test-gcp-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/int-test-gcp-workflow.yml
     WORKFLOW_CLASS: integration-gcp
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_GCP_INTEGRATION
-    REQUIRED_VARS: STAGING_GCP_ARTIFACT_REGISTRY,STAGING_GCP_SERVICE_ACCOUNT_KEY,STAGING_GCP_PROJECT_ID,STAGING_GCP_REGION,STAGING_GCP_ZONE,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: This workflow provisions and tears down GKE resources. It must remain pointed at staging-only GCP projects and registries.
+    REQUIRED_VARS: STAGING_GCP_ARTIFACT_REGISTRY,STAGING_GCP_SERVICE_ACCOUNT_KEY,STAGING_GCP_PROJECT_ID,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: Preferred rehearsal mode uses a protected `STAGING_GKE_KUBECONFIG` file variable for an existing GKE cluster. Full GKE lifecycle remains supported when project and zone variables are loaded.
     WORKFLOW_PLAN: |
       1. Build the operator image in staging Artifact Registry only.
-      2. Provision a disposable GKE cluster in the staging project.
+      2. Prefer an existing staging GKE cluster via protected kubeconfig input; fall back to disposable cluster creation only when required.
       3. Run the GCP integration matrix and collect logs.
-      4. Delete the staging GKE cluster at the end of the run.
+      4. Clean only the resources created by the rehearsal path that was actually used.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-gcp-workflow-rehearsal.sh
 
 distroless-int-test-workflow-rehearsal:

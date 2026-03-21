@@ -128,3 +128,19 @@ materialize_json_secret() {
   echo "Unable to interpret secret payload as JSON or base64-encoded JSON" >&2
   return 1
 }
+
+materialize_file_secret() {
+  secret_value="$1"
+  dest_path="$2"
+
+  if [ -f "${secret_value}" ]; then
+    cp "${secret_value}" "${dest_path}"
+    return 0
+  fi
+
+  if printf '%s' "${secret_value}" | base64 -d > "${dest_path}" 2>/dev/null; then
+    return 0
+  fi
+
+  printf '%s\n' "${secret_value}" > "${dest_path}"
+}

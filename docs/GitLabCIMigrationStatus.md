@@ -155,10 +155,12 @@
 - Present in the modularized graph but not yet executed end to end:
   - Azure integration family
     - concrete runtime script now exists
-    - currently blocked only on missing `STAGING_AZURE_*` variables in the group project
+    - current preferred rehearsal contract is protected `STAGING_AKS_KUBECONFIG` plus staging ACR and storage variables
+    - full AKS lifecycle remains available as a fallback path when the Azure staging credential set is loaded
   - GCP integration family
     - concrete runtime script now exists
-    - currently blocked only on missing `STAGING_GCP_*` variables in the group project
+    - current preferred rehearsal contract is protected `STAGING_GKE_KUBECONFIG` plus staging Artifact Registry and bucket variables
+    - full GKE lifecycle remains available as a fallback path when project and zone variables are loaded
   - distroless integration family
     - concrete build and integration runtime hooks now exist
     - still needs first live proof run in the group project
@@ -191,8 +193,8 @@ Interpretation:
 
 - first live runtime proof for the distroless staging family
 - first live runtime proof for the ARM staging families
-- Azure staging variable load and first AKS runtime proof
-- GCP staging variable load and first GKE runtime proof
+- AKS existing-cluster kubeconfig load and first Azure runtime proof
+- GKE existing-cluster kubeconfig load and first GCP runtime proof
 - cosign signing execution for release-focused workflows
 - remaining runtime stabilization for the partitioned EKS variants
 - release, bundle, and chart publication execution against staging destinations
@@ -238,9 +240,26 @@ Interpretation:
   - `qualification-report.md`
   - `compatibility-decision.json`
   - this is the bridge between the reviewed release-process design and the runnable GitLab pipeline
+- The fixed release-train controller proof is now green in the group rehearsal on commit `5a377b16`:
+  - pipeline `35082842`
+  - `release-manifest-resolve-rehearsal`: `success`
+  - `lane-select-rehearsal`: `success`
+  - `qualification-report-rehearsal`: `success`
+  - `compatibility-publish-rehearsal`: `success`
+  - the release evidence matcher now records the executed release jobs with no false `missing jobs`
 - The qualification controller no longer treats missing downstream evidence as a pass:
   - if build, scan, integration, or Helm artifacts are absent, the disposition remains `qualified with caveats`
   - the report now records the missing jobs explicitly instead of producing a false-green summary
+- The matching qualification-lane controller proof is now also green on commit `5a377b16`:
+  - pipeline `35082938`
+  - selected lane: `qualification`
+  - disposition: `qualified with caveats`
+  - executed evidence:
+    - `build-test-push-workflow`
+    - `build-test-push-trivy-scan`
+  - plan-only evidence:
+    - `int-test-workflow`
+    - `helm-test-workflow`
 - The source GitHub workflow name `merge-develop-to-main-workflow.yml` is retained only for traceability. The GitLab equivalent is named `release-branch-to-main-rehearsal` and models the future-state behavior:
   - cut `release/<version>` from an approved `develop` commit
   - create an MR from `release/<version>` to `main`
