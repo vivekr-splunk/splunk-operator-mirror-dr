@@ -400,8 +400,6 @@ default:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "release_train"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
 
 .rules-mr-only:
   rules:
