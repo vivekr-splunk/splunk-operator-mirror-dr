@@ -107,10 +107,18 @@ ensure_azure_cli() {
   fi
 
   if command -v apt-get >/dev/null 2>&1; then
+    azure_apt_release="$(lsb_release -cs)"
+    case "${azure_apt_release}" in
+      bullseye|bookworm)
+        ;;
+      *)
+        azure_apt_release="bookworm"
+        ;;
+    esac
     install_os_packages ca-certificates curl gnupg lsb-release apt-transport-https
     install -d -m 0755 /etc/apt/keyrings
     curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
-    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" >/etc/apt/sources.list.d/azure-cli.list
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ ${azure_apt_release} main" >/etc/apt/sources.list.d/azure-cli.list
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends azure-cli
     return 0
