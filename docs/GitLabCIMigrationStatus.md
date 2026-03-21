@@ -64,6 +64,17 @@
   - FOSSA dependency and license scan
   - JUnit test report publication
   - coverage artifact publication
+- Branch-pipeline policy is now intentionally asymmetric:
+  - `develop` push pipelines are the fast check-in lane
+  - they should prove only:
+    - `format-and-vet`
+    - `bias-language`
+    - `unit-tests`
+    - `kubectl-splunk-tests`
+  - security, build, and long-runtime families stay on:
+    - merge requests
+    - `main`
+    - explicit qualification or release lanes
 - The remaining GitHub workflow files are now represented in GitLab CI as staging-safe rehearsal jobs.
 - The product repo now also contains a first-class release and qualification controller slice:
   - checked-in controller input:
@@ -208,6 +219,10 @@ Interpretation:
 
 - This file tracks the live rehearsal state in GitLab.
 - The bootstrap CI file currently uses permissive `workflow:rules` so job execution can be proven before branch and MR gating is tightened.
+- Release-family jobs are no longer allowed in normal MR pipelines. They now stay limited to:
+  - `release_train`
+  - explicit web/manual execution
+  - this avoids GitLab pipeline-creation failures caused by MR-visible release jobs depending on controller jobs that are absent outside release lanes.
 - The bootstrap CI file now uses the internal CI base image `docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.25-aws:5.1.0` to avoid unauthenticated Docker Hub pull-rate limits on shared runners.
 - The bootstrap verify job follows the current GitHub workflow behavior by running `make fmt` without a post-format diff gate.
 - The bootstrap pipeline now uses job-specific module flags: `format-and-vet` keeps writable module resolution, while `unit-tests` disables workspace mode and clears `GOFLAGS` before `make test`.

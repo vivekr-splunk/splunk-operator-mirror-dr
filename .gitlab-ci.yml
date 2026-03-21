@@ -308,7 +308,6 @@ default:
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
 
 .rules-build-active:
   rules:
@@ -320,7 +319,6 @@ default:
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
 
 .rules-build-scan-and-eks:
   rules:
@@ -329,38 +327,33 @@ default:
     - if: '$REHEARSAL_PIPELINE_MODE == "qualification_lane"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
 
-.rules-main-develop-mr:
+.rules-main-or-mr:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "variant_runtime"'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
 
-.rules-variant-runtime-or-main-develop-mr:
+.rules-variant-runtime-or-main-or-mr:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "variant_runtime"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
 
-.rules-eks-integration-or-main-develop-mr:
+.rules-eks-integration-or-main-or-mr:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
     - if: '$REHEARSAL_PIPELINE_MODE == "qualification_lane"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
 
-.rules-helm-integration-or-main-develop-mr-or-web:
+.rules-helm-integration-or-main-or-mr-or-web:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
     - if: '$REHEARSAL_PIPELINE_MODE == "qualification_lane"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_BRANCH == "develop"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
 
 .rules-qualification-or-release-train-or-web-manual:
@@ -683,7 +676,7 @@ distroless-build-test-push-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .build-family
-    - .rules-variant-runtime-or-main-develop-mr
+    - .rules-variant-runtime-or-main-or-mr
   variables:
     WORKFLOW_SLUG: distroless-build-test-push-workflow
     WORKFLOW_NAME: Build and Test Distroless
@@ -716,7 +709,7 @@ int-test-workflow-rehearsal:
     - .integration-family-10h
     - .required-rehearsal
     - .needs-standard-build
-    - .rules-eks-integration-or-main-develop-mr
+    - .rules-eks-integration-or-main-or-mr
   variables:
     WORKFLOW_SLUG: int-test-workflow
     WORKFLOW_NAME: Integration Test Workflow
@@ -837,7 +830,7 @@ int-test-azure-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-10h
-    - .rules-main-develop-mr
+    - .rules-main-or-mr
   variables:
     WORKFLOW_SLUG: int-test-azure-workflow
     WORKFLOW_NAME: Integration Test on Azure Workflow
@@ -857,7 +850,7 @@ int-test-gcp-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-10h
-    - .rules-main-develop-mr
+    - .rules-main-or-mr
   variables:
     WORKFLOW_SLUG: int-test-gcp-workflow
     WORKFLOW_NAME: Integration Test on GCP Workflow
@@ -879,7 +872,7 @@ distroless-int-test-workflow-rehearsal:
     - .integration-family-10h
     - .required-rehearsal
     - .needs-distroless-build
-    - .rules-variant-runtime-or-main-develop-mr
+    - .rules-variant-runtime-or-main-or-mr
   variables:
     WORKFLOW_SLUG: distroless-int-test-workflow
     WORKFLOW_NAME: Integration Test Workflow Distroless
@@ -909,7 +902,7 @@ helm-test-workflow-rehearsal:
     - .integration-family-10h
     - .required-rehearsal
     - .needs-standard-build
-    - .rules-helm-integration-or-main-develop-mr-or-web
+    - .rules-helm-integration-or-main-or-mr-or-web
   variables:
     WORKFLOW_SLUG: helm-test-workflow
     WORKFLOW_NAME: Helm Test Workflow
