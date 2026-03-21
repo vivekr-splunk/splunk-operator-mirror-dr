@@ -59,6 +59,7 @@ trap 'cleanup_and_exit $?' EXIT INT TERM
 
 prepare_runtime_artifacts "${context_file}" "${cleanup_log}" "${cluster_log}" "${build_log}" "${run_log}" "${pod_log_dir}"
 ensure_jq
+ensure_azure_cli
 require_commands bash az docker make kubectl go jq base64
 require_envs \
   STAGING_AZURE_ACR_LOGIN_SERVER \

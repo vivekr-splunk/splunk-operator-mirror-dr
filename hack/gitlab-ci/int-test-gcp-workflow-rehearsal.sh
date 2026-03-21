@@ -63,6 +63,7 @@ trap 'cleanup_and_exit $?' EXIT INT TERM
 
 prepare_runtime_artifacts "${context_file}" "${cleanup_log}" "${cluster_log}" "${build_log}" "${run_log}" "${pod_log_root}"
 ensure_jq
+ensure_gcloud_cli
 require_commands bash gcloud docker make kubectl go jq base64
 require_envs \
   STAGING_GCP_ARTIFACT_REGISTRY \

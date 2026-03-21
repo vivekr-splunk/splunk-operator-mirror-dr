@@ -75,6 +75,108 @@ ensure_jq() {
   return 1
 }
 
+install_os_packages() {
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
+    return 0
+  fi
+
+  if command -v dnf >/dev/null 2>&1; then
+    dnf install -y "$@"
+    return 0
+  fi
+
+  if command -v yum >/dev/null 2>&1; then
+    yum install -y "$@"
+    return 0
+  fi
+
+  if command -v apk >/dev/null 2>&1; then
+    apk add --no-cache "$@"
+    return 0
+  fi
+
+  echo "Unable to install packages because no supported package manager was found" >&2
+  return 1
+}
+
+ensure_azure_cli() {
+  if command -v az >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    install_os_packages ca-certificates curl gnupg lsb-release apt-transport-https
+    install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" >/etc/apt/sources.list.d/azure-cli.list
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends azure-cli
+    return 0
+  fi
+
+  if command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+    install_os_packages ca-certificates curl gnupg2
+    rpm --import https://packages.microsoft.com/keys/microsoft.asc
+    cat >/etc/yum.repos.d/azure-cli.repo <<'EOF'
+[azure-cli]
+name=Azure CLI
+baseurl=https://packages.microsoft.com/yumrepos/azure-cli
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+EOF
+    if command -v dnf >/dev/null 2>&1; then
+      dnf install -y azure-cli
+    else
+      yum install -y azure-cli
+    fi
+    return 0
+  fi
+
+  echo "Unable to install Azure CLI in this runtime image" >&2
+  return 1
+}
+
+ensure_gcloud_cli() {
+  if command -v gcloud >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    install_os_packages ca-certificates curl gnupg apt-transport-https
+    install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /etc/apt/keyrings/google-cloud-cli.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/google-cloud-cli.gpg] https://packages.cloud.google.com/apt cloud-sdk main" >/etc/apt/sources.list.d/google-cloud-sdk.list
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
+    return 0
+  fi
+
+  if command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+    install_os_packages ca-certificates curl gnupg2
+    cat >/etc/yum.repos.d/google-cloud-cli.repo <<'EOF'
+[google-cloud-cli]
+name=Google Cloud CLI
+baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el8-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg https://packages.cloud.google.com/yum/doc/yum-key.gpg
+EOF
+    if command -v dnf >/dev/null 2>&1; then
+      dnf install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
+    else
+      yum install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
+    fi
+    return 0
+  fi
+
+  echo "Unable to install Google Cloud CLI in this runtime image" >&2
+  return 1
+}
+
 ensure_internal_image_ref() {
   image_ref="$1"
   description="$2"
