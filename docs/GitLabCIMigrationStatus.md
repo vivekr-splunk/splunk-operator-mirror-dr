@@ -186,6 +186,7 @@
 - first live proof for the new GitHub intake automation validation job
 - first live proof for the read-only GitHub mirror health check job
 - first live proof for the rollback rehearsal packet job
+- first live proof for the Slack notification job
 - Executed but still under stabilization:
   - namespace-scope/manual/nightly EKS variants
     - the first real MR run entered those jobs and exposed an under-partitioned runtime shape
@@ -222,6 +223,7 @@ Interpretation:
 - executable GitHub issue and PR intake automation replacement still needs first end-to-end proof from the mirrored GitHub surface
 - GitHub mirror health still needs a disposable mirror target before it can count as a full rehearsal
 - rollback drill still needs a timed live execution window beyond the generated rehearsal packet
+- Slack notification delivery still needs a dedicated `STAGING_SLACK_TOKEN` before the shared notification pattern can send to the configured channel
 
 ## Notes
 
@@ -308,6 +310,13 @@ Interpretation:
     - `rollback-rehearsal`
   - the intake validation and rollback packet jobs are enabled in the group rehearsal project
   - the mirror health-check job remains disabled until a deliberate mirror target is loaded
+- Slack notification is now modeled explicitly in the product repo using the same internal pattern shape already used by shared CI templates:
+  - the configured rehearsal channel is `sok-gitlab-ci-alerts`
+  - the notifier is wired as a non-authoritative final-stage job
+  - the current rehearsal project now carries the non-secret channel variables:
+    - `STAGING_SLACK_CHANNEL=sok-gitlab-ci-alerts`
+    - `STAGING_SLACK_SCHEDULE_CHANNEL=sok-gitlab-ci-alerts`
+  - live delivery remains disabled until a dedicated `STAGING_SLACK_TOKEN` is loaded
 - The workflow-rehearsal scaffold now emits a dedicated `context.txt` artifact for each job with safe CI metadata:
   - observed timestamp
   - pipeline mode
