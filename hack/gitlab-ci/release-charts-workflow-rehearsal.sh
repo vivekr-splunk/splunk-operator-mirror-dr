@@ -17,6 +17,7 @@ mkdir -p "rehearsal" "${chart_output_dir}"
 mkdir -p "${chart_output_dir}"
 
 load_repo_dotenv "${CI_PROJECT_DIR}/.env"
+load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-controller/release-cycle.env"
 
 ci_bin_dir="${CI_PROJECT_DIR}/bin"
 ensure_ci_bin_path "${ci_bin_dir}"
@@ -27,6 +28,7 @@ chart_release_url="${STAGING_CHART_RELEASE_REPOSITORY:-https://example.invalid/s
 install_helm_version "${HELM_VERSION}" "${ci_bin_dir}"
 
 append_context "${context_file}" "helm_version" "${HELM_VERSION}"
+append_context "${context_file}" "release_branch" "${SOK_RELEASE_BRANCH:-}"
 append_context "${context_file}" "chart_release_url" "${chart_release_url}"
 append_context "${context_file}" "chart_output_dir" "${chart_output_dir}"
 

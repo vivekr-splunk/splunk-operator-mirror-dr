@@ -11,6 +11,7 @@ workflow:
     - when: always
 
 stages:
+  - intake
   - verify
   - test
   - security
@@ -185,6 +186,10 @@ default:
 .required-rehearsal:
   allow_failure: false
 
+.intake-family:
+  stage: intake
+  interruptible: true
+
 .build-family:
   stage: build
 
@@ -208,6 +213,29 @@ default:
 .administration-family:
   stage: administration
   interruptible: false
+
+.python-controller-bootstrap:
+  before_script:
+    - |
+      set -eu
+      if command -v python3 >/dev/null 2>&1; then
+        python3 --version
+        exit 0
+      fi
+      if command -v apt-get >/dev/null 2>&1; then
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3
+      elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y python3
+      elif command -v yum >/dev/null 2>&1; then
+        yum install -y python3
+      elif command -v apk >/dev/null 2>&1; then
+        apk add --no-cache python3
+      else
+        echo "No supported package manager found in base image" >&2
+        exit 1
+      fi
+      python3 --version
 
 .needs-standard-build:
   dependencies:
@@ -242,6 +270,13 @@ default:
     - arm-al2023-build-test-push-rehearsal
   needs:
     - job: arm-al2023-build-test-push-rehearsal
+      artifacts: true
+
+.needs-release-controller:
+  dependencies:
+    - lane-select-rehearsal
+  needs:
+    - job: lane-select-rehearsal
       artifacts: true
 
 # Shared trigger rules
@@ -279,6 +314,7 @@ default:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "qualification_lane"'
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
     - if: '$REHEARSAL_PIPELINE_MODE == "release_train"'
       when: never
@@ -290,6 +326,7 @@ default:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "qualification_lane"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -312,6 +349,7 @@ default:
 .rules-eks-integration-or-main-develop-mr:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "qualification_lane"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
@@ -319,10 +357,18 @@ default:
 .rules-helm-integration-or-main-develop-mr-or-web:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "qualification_lane"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_BRANCH == "develop"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
+
+.rules-qualification-or-release-train-or-web-manual:
+  rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "qualification_lane"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "release_train"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
 
 .rules-web-or-mr-manual:
   rules:
@@ -360,6 +406,43 @@ default:
 .rules-mr-only:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# Intake and controller family
+# These jobs create the machine-readable cycle manifest, select the lane, and publish
+# a first-class qualification record so downstream release and qualification jobs do not
+# rely only on ad hoc STAGING_* flags.
+release-manifest-resolve-rehearsal:
+  extends:
+    - .intake-family
+    - .required-rehearsal
+    - .python-controller-bootstrap
+    - .rules-qualification-or-release-train-or-web-manual
+  script:
+    - python3 hack/gitlab-ci/release-manifest-resolve-rehearsal.py
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/release-controller/
+
+lane-select-rehearsal:
+  extends:
+    - .intake-family
+    - .required-rehearsal
+    - .python-controller-bootstrap
+    - .rules-qualification-or-release-train-or-web-manual
+  needs:
+    - job: release-manifest-resolve-rehearsal
+      artifacts: true
+  dependencies:
+    - release-manifest-resolve-rehearsal
+  script:
+    - python3 hack/gitlab-ci/lane-select-rehearsal.py
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/release-controller/
 
 # Baseline CI family
 # These jobs are already proven live and form the required gate before build or release work can proceed.
@@ -1009,7 +1092,8 @@ arm-al2023-int-test-workflow-rehearsal:
 # Release and administration family
 # These jobs remain staging-safe and mostly rehearsal-first until the release-train implementation is complete.
 # The production target is a linked release train:
-# - promote develop to main via GitLab MR
+# - cut release/<version> from an approved develop commit
+# - promote release/<version> to main via GitLab MR
 # - prepare release content and version updates
 # - build and validate RC artifacts
 # - publish final release artifacts
@@ -1019,6 +1103,7 @@ pre-release-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .release-family
+    - .needs-release-controller
     - .rules-release-train-or-web-manual
   variables:
     WORKFLOW_SLUG: pre-release-workflow
@@ -1038,6 +1123,7 @@ automated-release-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .release-family
+    - .needs-release-controller
     - .rules-release-train-or-web-manual
   variables:
     WORKFLOW_SLUG: automated-release-workflow
@@ -1058,6 +1144,7 @@ bundle-push-post-release-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .release-family
+    - .needs-release-controller
     - .rules-release-train-or-web-manual
   variables:
     WORKFLOW_SLUG: bundle-push-post-release-workflow
@@ -1078,6 +1165,7 @@ release-charts-workflow-rehearsal:
     - .workflow-rehearsal-template
     - .release-family
     - .required-rehearsal
+    - .needs-release-controller
     - .rules-release-train-or-web-manual
   variables:
     WORKFLOW_SLUG: release-charts-workflow
@@ -1102,6 +1190,7 @@ merge-develop-to-main-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .administration-family
+    - .needs-release-controller
     - .rules-release-train-or-web-manual
   variables:
     WORKFLOW_SLUG: merge-develop-to-main-workflow
@@ -1110,11 +1199,12 @@ merge-develop-to-main-workflow-rehearsal:
     WORKFLOW_CLASS: release-governance
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_MERGE_DEVELOP_TO_MAIN
     REQUIRED_VARS: STAGING_RELEASE_VERSION,STAGING_ENTERPRISE_VERSION,STAGING_RELEASE_CANDIDATE_VERSION
-    WORKFLOW_NOTES: The GitHub workflow creates a PR and then drives RC publication. The GitLab equivalent should create an MR and keep all downstream release activity pointed at staging targets.
+    WORKFLOW_NOTES: The GitHub workflow creates a PR and then drives RC publication. The GitLab equivalent should cut release/<version> from an approved develop commit, create an MR from release/<version> to main, and keep all downstream release activity pointed at staging targets.
     WORKFLOW_PLAN: |
-      1. Create a GitLab MR from develop to main instead of a GitHub PR.
-      2. Validate mergeability and release metadata generation without pushing public artifacts.
-      3. Keep RC image publication confined to staging release repositories.
+      1. Create release/<version> from an approved develop commit.
+      2. Create a GitLab MR from release/<version> to main instead of a direct develop-to-main GitHub PR.
+      3. Validate mergeability and release metadata generation without pushing public artifacts.
+      4. Keep RC image publication confined to staging release repositories.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/merge-develop-to-main-workflow-rehearsal.sh
 
 cla-check-intake-note:
@@ -1134,3 +1224,77 @@ cla-check-intake-note:
       1. Keep CLA and CoC automation on the public GitHub intake repository.
       2. Ensure the GitHub intake workflow never becomes an authoritative merge gate after cutover.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/cla-check-intake-note.sh
+
+qualification-report-rehearsal:
+  extends:
+    - .administration-family
+    - .required-rehearsal
+    - .python-controller-bootstrap
+    - .rules-qualification-or-release-train-or-web-manual
+  needs:
+    - job: lane-select-rehearsal
+      artifacts: true
+    - job: build-test-push-rehearsal
+      artifacts: true
+      optional: true
+    - job: build-test-push-trivy-scan
+      artifacts: true
+      optional: true
+    - job: int-test-workflow-rehearsal
+      artifacts: true
+      optional: true
+    - job: helm-test-workflow-rehearsal
+      artifacts: true
+      optional: true
+    - job: pre-release-workflow-rehearsal
+      artifacts: true
+      optional: true
+    - job: automated-release-workflow-rehearsal
+      artifacts: true
+      optional: true
+    - job: bundle-push-post-release-rehearsal
+      artifacts: true
+      optional: true
+    - job: release-charts-workflow-rehearsal
+      artifacts: true
+      optional: true
+    - job: merge-develop-to-main-workflow-rehearsal
+      artifacts: true
+      optional: true
+  dependencies:
+    - lane-select-rehearsal
+    - build-test-push-rehearsal
+    - build-test-push-trivy-scan
+    - int-test-workflow-rehearsal
+    - helm-test-workflow-rehearsal
+    - pre-release-workflow-rehearsal
+    - automated-release-workflow-rehearsal
+    - bundle-push-post-release-rehearsal
+    - release-charts-workflow-rehearsal
+    - merge-develop-to-main-workflow-rehearsal
+  script:
+    - python3 hack/gitlab-ci/qualification-report-rehearsal.py
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/release-controller/
+
+compatibility-publish-rehearsal:
+  extends:
+    - .administration-family
+    - .required-rehearsal
+    - .python-controller-bootstrap
+    - .rules-qualification-or-release-train-or-web-manual
+  needs:
+    - job: qualification-report-rehearsal
+      artifacts: true
+  dependencies:
+    - qualification-report-rehearsal
+  script:
+    - python3 hack/gitlab-ci/compatibility-publish-rehearsal.py
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/release-controller/

@@ -89,6 +89,7 @@ splunk-operator-*.tar.gz
 clair-scanner
 clair-scanner-logs
 release-*
+!hack/gitlab-ci/release-manifest-resolve-rehearsal.py
 deploy/olm-certified
 *junit.xml
 # Bias Language Linter

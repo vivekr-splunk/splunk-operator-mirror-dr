@@ -27,6 +27,15 @@
 - Release-train documentation now exists in:
   - `docs/GitLabReleaseTrainArchitecture.md`
   - use that document to understand how the GitHub release workflows collapse into one authoritative GitLab release train
+- A release/qualification controller layer now exists in the GitLab rehearsal:
+  - `release-manifest-resolve-rehearsal`
+  - `lane-select-rehearsal`
+  - `qualification-report-rehearsal`
+  - `compatibility-publish-rehearsal`
+  - these jobs create a checked-in release-cycle contract instead of relying only on ad hoc `STAGING_*` flags
+- Release and qualification controller documentation now exists in:
+  - `docs/GitLabReleaseQualificationController.md`
+  - use that document to understand the checked-in cycle manifest, lane selection, qualification artifacts, and compatibility publication plan
 - The GitLab CI structure has now been refactored into reusable workflow families instead of continuing to grow as one job per legacy GitHub workflow:
   - shared rule families for:
     - core CI
@@ -56,6 +65,19 @@
   - JUnit test report publication
   - coverage artifact publication
 - The remaining GitHub workflow files are now represented in GitLab CI as staging-safe rehearsal jobs.
+- The product repo now also contains a first-class release and qualification controller slice:
+  - checked-in controller input:
+    - `release-process/cycle-template.env`
+  - controller jobs:
+    - `release-manifest-resolve-rehearsal`
+    - `lane-select-rehearsal`
+    - `qualification-report-rehearsal`
+    - `compatibility-publish-rehearsal`
+  - shared controller library:
+    - `hack/gitlab-ci/lib/release_contract.py`
+  - purpose:
+    - replace large manual trigger forms with a checked-in cycle description
+    - emit machine-readable qualification and compatibility artifacts before the final controller integrations are complete
 - Those rehearsal jobs are intentionally plan-only by default:
   - they emit an artifact showing the source GitHub workflow, required `STAGING_*` variables, and the execution plan
   - they use an internal-registry-first policy for current execution
@@ -90,6 +112,10 @@
   - `bundle-push-post-release-rehearsal`
   - `release-charts-workflow-rehearsal`
   - `merge-develop-to-main-workflow-rehearsal`
+  - `release-manifest-resolve-rehearsal`
+  - `lane-select-rehearsal`
+  - `qualification-report-rehearsal`
+  - `compatibility-publish-rehearsal`
   - `cla-check-intake-note`
 - Actually executed and proven in group rehearsal:
   - `format-and-vet`
@@ -107,6 +133,10 @@
   - `bundle-push-post-release-rehearsal`
   - `release-charts-workflow-rehearsal`
   - `merge-develop-to-main-workflow-rehearsal`
+- Present in the modularized graph but not yet executed end to end:
+  - release and qualification controller family
+    - manifest resolve, lane select, qualification report, and compatibility publish are now implemented in the product repo
+    - still needs first live pipeline proof in the group project
 - Dedicated fast-path proof points now exist:
   - EKS runtime:
     - pipeline `35056838`
@@ -135,7 +165,8 @@
   - ARM build and integration families
     - concrete buildx and integration runtime hooks now exist for Ubuntu, RHEL, and AL2023
     - still need first live proof runs in the group project
-  - release promotion to official public destinations
+- release promotion to official public destinations
+- final production release-branch creation and real `release/<version> -> main` MR mutation
 - Executed but still under stabilization:
   - namespace-scope/manual/nightly EKS variants
     - the first real MR run entered those jobs and exposed an under-partitioned runtime shape
@@ -199,6 +230,20 @@ Interpretation:
   - core reusable families now centralize stage intent, timeout policy, interruptibility, and common rule sets
   - the build and Helm runtime jobs now reuse a shared standard-build dependency contract instead of duplicating `needs` and `dependencies`
   - this is the first production-grade structural refactor of the GitLab CI file, even though several runtime families are still scaffolded rather than fully executable
+- The release and qualification controller layer now emits a first-class contract under `rehearsal/release-controller/`:
+  - `release-cycle-manifest.json`
+  - `release-cycle.env`
+  - `lane-selection.json`
+  - `qualification-manifest.json`
+  - `qualification-report.md`
+  - `compatibility-decision.json`
+  - this is the bridge between the reviewed release-process design and the runnable GitLab pipeline
+- The qualification controller no longer treats missing downstream evidence as a pass:
+  - if build, scan, integration, or Helm artifacts are absent, the disposition remains `qualified with caveats`
+  - the report now records the missing jobs explicitly instead of producing a false-green summary
+- The source GitHub workflow name `merge-develop-to-main-workflow.yml` is retained only for traceability. The GitLab equivalent now models the future-state behavior:
+  - cut `release/<version>` from an approved `develop` commit
+  - create an MR from `release/<version>` to `main`
 - The workflow-rehearsal scaffold now emits a dedicated `context.txt` artifact for each job with safe CI metadata:
   - observed timestamp
   - pipeline mode

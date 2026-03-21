@@ -19,12 +19,14 @@ mkdir -p "rehearsal" "${output_dir}"
 mkdir -p "${output_dir}"
 
 load_repo_dotenv "${CI_PROJECT_DIR}/.env"
+load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-controller/release-cycle.env"
 
 current_version="$(awk '/^VERSION[[:space:]]*\?/ {print $3; exit}' "${CI_PROJECT_DIR}/Makefile")"
 bundle_registry="${STAGING_BUNDLE_REGISTRY}"
 operator_image_name="${ARTIFACTORY_SPLUNK_OPERATOR_IMAGE_NAME:-splunk-operator}"
 
 append_context "${context_file}" "release_version" "${current_version}"
+append_context "${context_file}" "release_branch" "${SOK_RELEASE_BRANCH:-}"
 append_context "${context_file}" "bundle_registry" "${bundle_registry}"
 append_context "${context_file}" "release_notes_target" "${STAGING_RELEASE_NOTES_TARGET}"
 

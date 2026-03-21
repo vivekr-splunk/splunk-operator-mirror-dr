@@ -24,6 +24,15 @@ load_repo_dotenv() {
   set +a
 }
 
+load_optional_release_controller_env() {
+  controller_env_path="$1"
+  if [ -f "$controller_env_path" ]; then
+    set -a
+    . "$controller_env_path"
+    set +a
+  fi
+}
+
 require_file() {
   path="$1"
   description="$2"
