@@ -19,8 +19,11 @@ def main() -> int:
         next_jobs = [
             "pre-release-workflow-rehearsal",
             "automated-release-workflow-rehearsal",
+            "psr-release-qualification-rehearsal",
             "release-charts-workflow-rehearsal",
             "bundle-push-post-release-rehearsal",
+            "preflight-certification-rehearsal",
+            "ecosystem-submission-rehearsal",
             "release-branch-to-main-rehearsal",
         ]
         approval_gate = "rc-to-ga-promotion"

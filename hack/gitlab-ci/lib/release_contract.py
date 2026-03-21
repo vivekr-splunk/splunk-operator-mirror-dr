@@ -228,6 +228,12 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
             "release_bucket": first_non_empty(env.get("STAGING_RELEASE_BUCKET"), default="unset"),
             "release_notes_target": first_non_empty(env.get("STAGING_RELEASE_NOTES_TARGET"), default="unset"),
             "bundle_registry": first_non_empty(env.get("STAGING_BUNDLE_REGISTRY"), default="unset"),
+            "chart_repository": first_non_empty(env.get("STAGING_CHART_RELEASE_REPOSITORY"), default="unset"),
+            "certification_registry": first_non_empty(env.get("STAGING_CERTIFICATION_REGISTRY"), default="unset"),
+            "psr_project": first_non_empty(env.get("STAGING_PSR_PROJECT_PATH"), default="psr/k8s-operator"),
+            "operatorhub_repo": first_non_empty(
+                env.get("STAGING_OPERATORHUB_REPO"), default="k8s-operatorhub/community-operators"
+            ),
         },
         "governance": {
             "approvals_required": 1 if effective_lane == "product-release" else 0,
@@ -270,5 +276,9 @@ def write_dotenv(path: Path, manifest: dict[str, object]) -> None:
         f"SOK_RELEASE_REPOSITORY={release['release_repository']}",
         f"SOK_RELEASE_BUCKET={release['release_bucket']}",
         f"SOK_RELEASE_NOTES_TARGET={release['release_notes_target']}",
+        f"SOK_CHART_REPOSITORY={release['chart_repository']}",
+        f"SOK_CERTIFICATION_REGISTRY={release['certification_registry']}",
+        f"SOK_PSR_PROJECT={release['psr_project']}",
+        f"SOK_OPERATORHUB_REPO={release['operatorhub_repo']}",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

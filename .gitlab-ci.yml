@@ -1096,9 +1096,12 @@ arm-al2023-int-test-workflow-rehearsal:
 # - promote release/<version> to main via GitLab MR
 # - prepare release content and version updates
 # - build and validate RC artifacts
+# - trigger PSR release qualification
 # - publish final release artifacts
-# - publish charts
+# - publish and verify charts
 # - publish bundles and catalogs
+# - run preflight certification gates
+# - assemble ecosystem submission payloads
 pre-release-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
@@ -1140,6 +1143,26 @@ automated-release-workflow-rehearsal:
       4. Record signing inputs, but do not require or perform cosign signing in this dry-run slice.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/automated-release-workflow-rehearsal.sh
 
+psr-release-qualification-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .needs-release-controller
+    - .rules-release-train-or-web-manual
+  variables:
+    WORKFLOW_SLUG: psr-release-qualification-workflow
+    WORKFLOW_NAME: PSR Release Qualification Workflow
+    SOURCE_WORKFLOW_FILE: psr/k8s-operator
+    WORKFLOW_CLASS: release-qualification-psr
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_PSR_RELEASE
+    REQUIRED_VARS: STAGING_PSR_BASE_VERSION,STAGING_SPLUNK_ENTERPRISE_IMAGE
+    WORKFLOW_NOTES: PSR is the long-running release-quality gate for upgrade, app-framework, and performance coverage. The GitLab release lane should gather the exact PSR trigger matrix before RC-to-GA approval.
+    WORKFLOW_PLAN: |
+      1. Prepare the PSR trigger matrix for upgrade, app-framework, and performance scenarios.
+      2. Run the matrix against the release candidate version and target Splunk enterprise image.
+      3. Collect PSR pipeline URLs and verdicts into the release qualification report before GA promotion.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/psr-release-qualification-rehearsal.sh
+
 bundle-push-post-release-rehearsal:
   extends:
     - .workflow-rehearsal-template
@@ -1174,17 +1197,58 @@ release-charts-workflow-rehearsal:
     WORKFLOW_CLASS: release-charts
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_CHART_RELEASE
     REQUIRED_VARS: ""
-    WORKFLOW_NOTES: GitHub chart-releaser output must be replaced with GitLab-driven chart publication to a staging mirror first. Public GitHub Pages must remain read-only until production cutover.
+    WORKFLOW_NOTES: GitHub chart-releaser output must be replaced with GitLab-driven OCI chart publication to an internal staging repository first. Public GitHub Pages must remain read-only until production cutover.
     WORKFLOW_PLAN: |
-      1. Package charts in GitLab and publish them to a staging chart release destination.
-      2. Validate the resulting index and asset layout before production cutover.
-      3. Keep the public GitHub Pages helm repo unchanged during rehearsal.
+      1. Package charts in GitLab and publish them to an internal OCI chart repository first.
+      2. Validate installability and publication metadata from that internal location before production cutover.
+      3. Run chart publication and certification readiness checks before official publication.
+      4. Keep the public GitHub Pages helm repo unchanged during rehearsal.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/release-charts-workflow-rehearsal.sh
   artifacts:
     when: always
     expire_in: 30 days
     paths:
       - rehearsal/
+
+preflight-certification-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .needs-release-controller
+    - .rules-release-train-or-web-manual
+  variables:
+    WORKFLOW_SLUG: preflight-certification-workflow
+    WORKFLOW_NAME: Preflight Certification Workflow
+    SOURCE_WORKFLOW_FILE: openshift-preflight
+    WORKFLOW_CLASS: release-certification
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_PREFLIGHT_CERTIFICATION
+    REQUIRED_VARS: STAGING_PREFLIGHT_DOCKERCONFIG,STAGING_PYXIS_API_TOKEN,STAGING_PYXIS_CERTIFICATION_COMPONENT_ID
+    WORKFLOW_NOTES: Red Hat certification needs both bundle and container preflight coverage. GitLab should emit the exact commands, evidence, and gating policy before any partner-portal submission.
+    WORKFLOW_PLAN: |
+      1. Run preflight against the operator bundle image and release container images.
+      2. Capture operator and container evidence as a release gate.
+      3. Block ecosystem submission until the preflight evidence is green.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/preflight-certification-rehearsal.sh
+
+ecosystem-submission-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .needs-release-controller
+    - .rules-release-train-or-web-manual
+  variables:
+    WORKFLOW_SLUG: ecosystem-submission-workflow
+    WORKFLOW_NAME: Ecosystem Submission Workflow
+    SOURCE_WORKFLOW_FILE: community-operators/redhat-certification
+    WORKFLOW_CLASS: release-ecosystem-submission
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_ECOSYSTEM_SUBMISSION
+    REQUIRED_VARS: STAGING_OPERATORHUB_GITHUB_TOKEN,STAGING_RH_CERT_PROJECT_ID
+    WORKFLOW_NOTES: OperatorHub and Red Hat certification submissions are downstream of the canonical GitLab release. GitLab should automate PR-ready payloads and submission packs, but external review and approval remain outside GitLab control.
+    WORKFLOW_PLAN: |
+      1. Prepare the OperatorHub and upstream-community-operators PR payloads.
+      2. Prepare the Red Hat certification submission pack from the release evidence bundle.
+      3. Keep external PR creation and partner-portal mutation disabled during rehearsal.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/ecosystem-submission-rehearsal.sh
 
 release-branch-to-main-rehearsal:
   extends:
@@ -1197,7 +1261,7 @@ release-branch-to-main-rehearsal:
     WORKFLOW_NAME: Release Branch To Main Governance Workflow
     SOURCE_WORKFLOW_FILE: .github/workflows/merge-develop-to-main-workflow.yml
     WORKFLOW_CLASS: release-governance
-    EXECUTE_FLAG_NAME: STAGING_EXECUTE_MERGE_DEVELOP_TO_MAIN
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_RELEASE_BRANCH_TO_MAIN
     REQUIRED_VARS: STAGING_RELEASE_VERSION,STAGING_ENTERPRISE_VERSION,STAGING_RELEASE_CANDIDATE_VERSION
     WORKFLOW_NOTES: The GitHub workflow creates a PR and then drives RC publication. The GitLab equivalent should cut release/<version> from an approved develop commit, create an MR from release/<version> to main, and keep all downstream release activity pointed at staging targets.
     WORKFLOW_PLAN: |
@@ -1252,10 +1316,19 @@ qualification-report-rehearsal:
     - job: automated-release-workflow-rehearsal
       artifacts: true
       optional: true
+    - job: psr-release-qualification-rehearsal
+      artifacts: true
+      optional: true
     - job: bundle-push-post-release-rehearsal
       artifacts: true
       optional: true
     - job: release-charts-workflow-rehearsal
+      artifacts: true
+      optional: true
+    - job: preflight-certification-rehearsal
+      artifacts: true
+      optional: true
+    - job: ecosystem-submission-rehearsal
       artifacts: true
       optional: true
     - job: release-branch-to-main-rehearsal
@@ -1269,8 +1342,11 @@ qualification-report-rehearsal:
     - helm-test-workflow-rehearsal
     - pre-release-workflow-rehearsal
     - automated-release-workflow-rehearsal
+    - psr-release-qualification-rehearsal
     - bundle-push-post-release-rehearsal
     - release-charts-workflow-rehearsal
+    - preflight-certification-rehearsal
+    - ecosystem-submission-rehearsal
     - release-branch-to-main-rehearsal
   script:
     - python3 hack/gitlab-ci/qualification-report-rehearsal.py

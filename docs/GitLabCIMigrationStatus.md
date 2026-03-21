@@ -198,6 +198,9 @@ Interpretation:
 - cosign signing execution for release-focused workflows
 - remaining runtime stabilization for the partitioned EKS variants
 - release, bundle, and chart publication execution against staging destinations
+- PSR release qualification trigger and verdict ingestion
+- Red Hat preflight bundle and container certification execution
+- OperatorHub and Red Hat ecosystem submission automation
 - public-registry publication for pre-release and release workflows
 - GitHub intake automation replacement
 
@@ -247,6 +250,11 @@ Interpretation:
   - `qualification-report-rehearsal`: `success`
   - `compatibility-publish-rehearsal`: `success`
   - the release evidence matcher now records the executed release jobs with no false `missing jobs`
+- The release family now also models the remaining production release obligations as checked-in rehearsal stages:
+  - `psr-release-qualification-rehearsal`
+  - `preflight-certification-rehearsal`
+  - `ecosystem-submission-rehearsal`
+  - these remain staging-safe and plan-oriented until the required credentials and downstream integration contracts are approved
 - The qualification controller no longer treats missing downstream evidence as a pass:
   - if build, scan, integration, or Helm artifacts are absent, the disposition remains `qualified with caveats`
   - the report now records the missing jobs explicitly instead of producing a false-green summary

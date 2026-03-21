@@ -150,19 +150,30 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
   - sign and verify release images
   - generate release manifests
   - create the canonical GitLab release object
-  - mirror public-facing outputs only after GitLab release success
+  - keep official public publication downstream of GitLab release success
 
-### 5. Chart Publication
+### 5. PSR Release Qualification
+
+- source:
+  - `psr/k8s-operator`
+- target:
+  - trigger the PSR upgrade, app-framework, and performance suites against the release candidate
+  - collect downstream PSR pipeline URLs, verdicts, and owner triage
+  - make PSR disposition part of the RC-to-GA approval packet
+
+### 6. Chart Publication And Verification
 
 - source:
   - `release.yml`
 - target:
   - package charts in GitLab
-  - publish chart assets to a staging chart location first
-  - validate index layout
-  - later mirror to public chart destinations as a downstream output
+  - publish charts to an internal OCI chart repository first
+  - validate installability and publication metadata from that internal OCI location
+  - generate a legacy index only when a compatibility consumer still requires it
+  - run chart publication or certification checks before official publication
+  - later mirror to official chart destinations as a downstream output
 
-### 6. Bundle And Catalog Publication
+### 7. Bundle And Catalog Publication
 
 - source:
   - `bundle-push-post-release.yml`
@@ -171,16 +182,39 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
   - push them to staging bundle/catalog destinations first
   - validate pull/install metadata before public publication
 
+### 8. Preflight Certification Gates
+
+- source:
+  - `openshift-preflight`
+- target:
+  - run operator-bundle preflight on the bundle image
+  - run container preflight on the release images that need Red Hat certification
+  - use a partner-accessible OCI registry plus Docker auth for certification inputs; do not assume world-public images are required
+  - preserve full preflight evidence as a release gate before ecosystem submission
+
+### 9. Ecosystem Submission
+
+- source:
+  - `community-operators`
+  - Red Hat partner certification workflow
+- target:
+  - prepare PR-ready payloads for community and upstream OperatorHub catalogs
+  - prepare the Red Hat partner-portal or certified-operator submission pack
+  - keep external review and approval clearly outside GitLab control while automating everything up to submission
+
 ## Automation Principles
 
 - GitLab is the authoritative release control plane.
 - `splunk-operator` is the authoritative release project, not just the source project.
 - Qualification should be cheaper than release and should be the default monthly path.
 - Public DockerHub or public ECR publication must never happen before GitLab has produced the canonical release result.
+- PSR is a release-quality gate, not a post-release report.
 - RC and final release promotion should be one linked GitLab release train, not separate manual islands unless governance requires a manual approval gate.
 - GitHub release publication is a mirrored downstream output, not the authoritative release creation step.
-- Version mutation, artifact generation, chart release, and bundle publication should be checked-in scripts or templates, not large inline shell bodies.
+- Version mutation, artifact generation, chart release, PSR qualification, certification, and bundle publication should be checked-in scripts or templates, not large inline shell bodies.
 - Decision logic should live in scripts or a controller, not primarily in CI YAML or manual workflow-dispatch inputs.
+- Internal publication and validation should happen before any external ecosystem mutation or public publication.
+- Red Hat preflight and certification do not require world-public images, but they do require registries that Red Hat systems can access with supplied credentials.
 
 ## Target GitLab Lane Shape
 
@@ -206,10 +240,13 @@ The product-release lane should run:
 2. pre-release content mutation and validation
 3. RC image build and artifact creation
 4. RC validation gates
-5. final release publication
-6. chart release
-7. bundle and catalog publication
-8. mirror and public artifact synchronization
+5. PSR release qualification
+6. final release publication
+7. chart publication and verification
+8. bundle and catalog publication
+9. preflight certification gates
+10. ecosystem submission preparation
+11. mirror and public artifact synchronization after approvals
 
 ## Expected GitLab Release Train Shape
 
@@ -249,8 +286,11 @@ Manual execution is not the desired steady state for:
 - qualification-report artifact generation
 - pre-release dry-run scripting
 - automated-release dry-run scripting
+- PSR release-qualification plan generation
 - chart package dry-run scripting
 - bundle/catalog dry-run scripting
+- preflight certification plan generation
+- ecosystem submission plan generation
 - internal-only staging guardrails
 
 ## What Must Still Be Added For Production Readiness
@@ -261,6 +301,10 @@ Manual execution is not the desired steady state for:
 - blocker bucketing and rerun automation
 - auto-created work items and status updates for Jira, Confluence, and Slack
 - automatic escalation from qualification failure to product-release lane
+- official Helm publication away from GitHub Pages
+- executable PSR downstream triggers and verdict ingestion
+- executable preflight bundle and container gates
+- executable OperatorHub and Red Hat submission automation
 - final public promotion path only at the end of the product-release lane
 
 ## Current Rehearsal Status
