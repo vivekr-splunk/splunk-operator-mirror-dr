@@ -30,8 +30,6 @@ variables:
   INTERNAL_CI_IMAGE: "docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.25-aws:5.1.0"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   REHEARSAL_PIPELINE_MODE: "full"
-  SOK_SOURCE_MODE: "develop"
-  SOK_TRIGGER_KIND: "develop-checkin"
   # Supported focused modes:
   # - build_scan
   # - eks_integration
