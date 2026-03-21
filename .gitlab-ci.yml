@@ -30,6 +30,15 @@ variables:
   INTERNAL_CI_IMAGE: "docker.repo.splunkdev.net/ci-cd/ci-container/golang-1.25-aws:5.1.0"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   REHEARSAL_PIPELINE_MODE: "full"
+  # Supported focused modes:
+  # - build_scan
+  # - eks_integration
+  # - helm_integration
+  # - cloud_runtime
+  # - qualification_lane
+  # - release_train
+  # - chart_release
+  # - variant_runtime
 
 default:
   image: $INTERNAL_CI_IMAGE
@@ -306,6 +315,8 @@ default:
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "chart_release"'
       when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "cloud_runtime"'
+      when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
@@ -317,6 +328,8 @@ default:
 .rules-security-standard:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "chart_release"'
+      when: never
+    - if: '$REHEARSAL_PIPELINE_MODE == "cloud_runtime"'
       when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
       when: never
@@ -330,6 +343,7 @@ default:
 .rules-build-active:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "build_scan"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "cloud_runtime"'
     - if: '$REHEARSAL_PIPELINE_MODE == "eks_integration"'
     - if: '$REHEARSAL_PIPELINE_MODE == "qualification_lane"'
     - if: '$REHEARSAL_PIPELINE_MODE == "helm_integration"'
@@ -348,6 +362,15 @@ default:
 
 .rules-main-or-mr:
   rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "cloud_runtime"'
+    - if: '$REHEARSAL_PIPELINE_MODE == "variant_runtime"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+.rules-cloud-runtime-or-main-or-mr:
+  rules:
+    - if: '$REHEARSAL_PIPELINE_MODE == "cloud_runtime"'
     - if: '$REHEARSAL_PIPELINE_MODE == "variant_runtime"'
       when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -850,7 +873,7 @@ int-test-azure-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-10h
-    - .rules-main-or-mr
+    - .rules-cloud-runtime-or-main-or-mr
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: $GITLAB_OIDC_AUDIENCE
@@ -861,10 +884,10 @@ int-test-azure-workflow-rehearsal:
     WORKFLOW_CLASS: integration-azure
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_AZURE_INTEGRATION
     REQUIRED_VARS: STAGING_AZURE_ACR_LOGIN_SERVER,STAGING_AZURE_STORAGE_ACCOUNT,STAGING_AZURE_STORAGE_ACCOUNT_KEY,STAGING_AZURE_TEST_CONTAINER,STAGING_AZURE_INDEXES_CONTAINER,STAGING_SPLUNK_ENTERPRISE_IMAGE
-    WORKFLOW_NOTES: Preferred rehearsal mode uses GitLab OIDC plus project-level Azure client and tenant variables, together with a protected `STAGING_AKS_KUBECONFIG` file variable for an existing AKS cluster. Static Azure credentials and ACR username/password remain as fallback only.
+    WORKFLOW_NOTES: The current GitHub-compatible rehearsal path still creates a disposable AKS cluster and should prefer GitLab OIDC plus project-level Azure client and tenant variables. A protected `STAGING_AKS_KUBECONFIG` file variable remains available only as a fallback for debug or break-glass validation.
     WORKFLOW_PLAN: |
       1. Build the operator image in staging ACR only.
-      2. Prefer an existing staging AKS cluster via protected kubeconfig input; fall back to disposable cluster creation only when required.
+      2. Create a disposable staging AKS cluster by default; use protected kubeconfig input only when a debug fallback is required.
       3. Run the Azure sanity integration path and collect logs.
       4. Clean only the resources created by the rehearsal path that was actually used.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-azure-workflow-rehearsal.sh
@@ -873,7 +896,7 @@ int-test-gcp-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-10h
-    - .rules-main-or-mr
+    - .rules-cloud-runtime-or-main-or-mr
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: $GITLAB_OIDC_AUDIENCE
@@ -884,10 +907,10 @@ int-test-gcp-workflow-rehearsal:
     WORKFLOW_CLASS: integration-gcp
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_GCP_INTEGRATION
     REQUIRED_VARS: STAGING_GCP_ARTIFACT_REGISTRY,STAGING_GCP_PROJECT_ID,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET,STAGING_SPLUNK_ENTERPRISE_IMAGE
-    WORKFLOW_NOTES: Preferred rehearsal mode uses GitLab OIDC plus project-level GCP workload-identity variables, together with a protected `STAGING_GKE_KUBECONFIG` file variable for an existing GKE cluster. Static service-account JSON remains as fallback only.
+    WORKFLOW_NOTES: The current GitHub-compatible rehearsal path still creates a disposable GKE cluster and should prefer GitLab OIDC plus project-level GCP workload-identity variables. A protected `STAGING_GKE_KUBECONFIG` file variable remains available only as a fallback for debug or break-glass validation.
     WORKFLOW_PLAN: |
       1. Build the operator image in staging Artifact Registry only.
-      2. Prefer an existing staging GKE cluster via protected kubeconfig input; fall back to disposable cluster creation only when required.
+      2. Create a disposable staging GKE cluster by default; use protected kubeconfig input only when a debug fallback is required.
       3. Run the GCP integration matrix and collect logs.
       4. Clean only the resources created by the rehearsal path that was actually used.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-gcp-workflow-rehearsal.sh
