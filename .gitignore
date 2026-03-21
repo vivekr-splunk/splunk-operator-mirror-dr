@@ -91,6 +91,14 @@ clair-scanner-logs
 release-*
 !hack/gitlab-ci/release-manifest-resolve-rehearsal.py
 !hack/gitlab-ci/release-branch-to-main-rehearsal.sh
+!release-process/
+!release-process/README.md
+!release-process/current-cycle.txt
+!release-process/cycle-template.env
+!release-process/cycles/
+!release-process/cycles/README.md
+!release-process/cycles/_template.env
+!release-process/cycles/*.env
 deploy/olm-certified
 *junit.xml
 # Bias Language Linter

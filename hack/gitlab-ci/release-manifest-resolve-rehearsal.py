@@ -33,6 +33,8 @@ def main() -> int:
                 f"- lane: {lane['selected']}",
                 f"- selection_reason: {lane['selection_reason']}",
                 f"- release_required: {lane['release_required']}",
+                f"- cycle_file: {context.manifest['source']['cycle_file']}",
+                f"- cycle_file_source: {context.manifest['source']['cycle_file_source']}",
                 f"- source_mode: {context.manifest['source']['source_mode']}",
                 f"- trigger_kind: {context.manifest['source']['trigger_kind']}",
                 f"- splunk_branch: {splunk['branch']}",

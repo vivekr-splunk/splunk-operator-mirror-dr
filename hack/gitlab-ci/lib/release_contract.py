@@ -24,6 +24,46 @@ def read_dotenv(path: Path) -> dict[str, str]:
     return values
 
 
+def resolve_cycle_contract_path(project_dir: Path, env: dict[str, str]) -> tuple[Path, str]:
+    explicit = first_non_empty(env.get("SOK_RELEASE_CYCLE_FILE"), env.get("RELEASE_CYCLE_FILE"), default="")
+    default_path = project_dir / "release-process" / "cycle-template.env"
+    selector_path = project_dir / "release-process" / "current-cycle.txt"
+
+    def resolve_candidate(raw_value: str) -> Path | None:
+        candidate = Path(raw_value)
+        candidates: list[Path] = []
+        if candidate.is_absolute():
+            candidates.append(candidate)
+        else:
+            candidates.extend(
+                [
+                    project_dir / candidate,
+                    project_dir / "release-process" / candidate,
+                    project_dir / "release-process" / "cycles" / candidate,
+                ]
+            )
+        for resolved in candidates:
+            if resolved.exists():
+                return resolved
+        return None
+
+    if explicit:
+        resolved = resolve_candidate(explicit)
+        if resolved is None:
+            raise RuntimeError(f"Configured release cycle file does not exist: {explicit}")
+        return resolved, "explicit-env"
+
+    if selector_path.exists():
+        selected = selector_path.read_text(encoding="utf-8").strip()
+        if selected:
+            resolved = resolve_candidate(selected)
+            if resolved is None:
+                raise RuntimeError(f"Selected release cycle file does not exist: {selected}")
+            return resolved, "current-cycle-selector"
+
+    return default_path, "default-template"
+
+
 def first_non_empty(*values: str | None, default: str = "") -> str:
     for value in values:
         if value is not None and str(value).strip():
@@ -135,7 +175,8 @@ class ReleaseContext:
 def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext:
     env = dict(os.environ)
     dotenv = read_dotenv(project_dir / ".env")
-    cycle_contract = read_dotenv(project_dir / "release-process" / "cycle-template.env")
+    cycle_contract_path, cycle_contract_source = resolve_cycle_contract_path(project_dir, env)
+    cycle_contract = read_dotenv(cycle_contract_path)
 
     operator_version = first_non_empty(
         env.get("SOK_BASELINE_TAG"),
@@ -280,6 +321,8 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
             "source_mode": source_mode,
             "source_mode_reason": source_mode_reason,
             "cycle_id": first_non_empty(env.get("SOK_CYCLE_ID"), cycle_contract.get("CYCLE_ID"), default="unversioned-cycle"),
+            "cycle_file": str(cycle_contract_path.relative_to(project_dir)),
+            "cycle_file_source": cycle_contract_source,
             "planned_start_date": first_non_empty(cycle_contract.get("PLANNED_START_DATE"), default="unplanned"),
             "branch_cut_date": first_non_empty(cycle_contract.get("BRANCH_CUT_DATE"), default="unknown"),
             "target_branch": first_non_empty(
@@ -410,6 +453,7 @@ def write_dotenv(path: Path, manifest: dict[str, object]) -> None:
         f"SOK_LANE_SELECTION_REASON={lane['selection_reason']}",
         f"SOK_RELEASE_REQUIRED={'true' if lane['release_required'] else 'false'}",
         f"SOK_PUBLIC_PUBLICATION_ENABLED={'true' if lane['public_publication_enabled'] else 'false'}",
+        f"SOK_RELEASE_CYCLE_FILE={manifest['source']['cycle_file']}",
         f"SOK_SOURCE_MODE={manifest['source']['source_mode']}",
         f"SOK_TRIGGER_KIND={manifest['source']['trigger_kind']}",
         f"SOK_BASELINE_BRANCH={sok['baseline_branch']}",
