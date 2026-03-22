@@ -175,11 +175,11 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
   - `release.yml`
 - target:
   - package charts in GitLab
-  - publish charts to an internal OCI chart repository first
-  - validate installability and publication metadata from that internal OCI location
-  - generate a legacy index only when a compatibility consumer still requires it
+  - publish both charts to an internal OCI chart repository first, using sibling OCI refs rather than a GitHub Pages index as the primary distribution model
+  - validate installability and publication metadata by pulling the published OCI charts and rendering them locally
+  - generate a legacy index only when a compatibility consumer such as the legacy chart-releaser path or Artifact Hub metadata still requires it
   - run chart publication or certification checks before official publication
-  - later mirror to official chart destinations as a downstream output
+  - mirror to the approved official external OCI chart destination only after release approval
 
 ### 7. Bundle And Catalog Publication
 

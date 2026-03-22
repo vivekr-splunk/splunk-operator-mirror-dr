@@ -1,116 +1,112 @@
 # Splunk Operator Helm Installation
 
-## Splunk Operator Helm chart Repository
+## Distribution Model
 
-Add the Splunk Operator and Enterprise charts to your Helm repository.
+The supported Helm distribution model for Splunk Operator is OCI-first.
 
+- the release pipeline packages and validates OCI charts
+- release candidates publish to an internal OCI chart repository first
+- approved GA releases publish to the official external OCI chart destination recorded in the release notes
+- the GitHub Pages Helm repo is compatibility-only for older consumers and should not be used for new automation
+
+Use the chart base published for your release. For GA that is the official external OCI chart base. For rehearsal and RC validation that is the internal staging OCI chart base.
+
+```bash
+export SPLUNK_HELM_OCI_BASE=oci://<published-chart-registry-base>
+export SPLUNK_OPERATOR_CHART_VERSION=<released-chart-version>
 ```
-helm repo add splunk https://splunk.github.io/splunk-operator/
-helm repo update
+
+Example internal rehearsal base:
+
+```bash
+export SPLUNK_HELM_OCI_BASE=oci://docker.repo.splunkdev.net/helm
 ```
 
-The ```splunk``` chart repository contains the ```splunk/splunk-operator``` chart to deploy the Splunk Operator and the ```splunk/splunk-enterprise``` chart to deploy Splunk Enterprise custom resources.
+## CRDs
 
-Users need to deploy the latest CRDs manually. This is a [limitation](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/) from helm. The ```splunk/splunk-operator``` chart no longer contains the CRDs to install on the first deployment due to the size of the CRDs. Helm has a chart size [limit of 1MB](https://helm.sh/docs/topics/advanced/#sql-storage-backend) due to internal limits in Kubernetes' underlying etcd key-value store, and the Splunk Operator for Kubernetes CRDs are too big to fit into the helm chart to deploy the operator. To install the CRDs for the first time, or to update the CRDs to the latest versions, follow one of the following steps.
+Users must install the latest CRDs manually before the first Helm install. This is a [Helm limitation](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/). The `splunk-operator` chart does not carry the CRDs because they exceed Helm chart size limits.
 
-```
+Install CRDs from a tagged source tree:
+
+```bash
 git clone https://github.com/splunk/splunk-operator.git .
 git checkout release/3.0.0
 make install
 ```
 
-OR
+Or install CRDs from a released asset:
 
-```
+```bash
 kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-crds.yaml --server-side
 ```
 
-Helm provides a long list of commands to manage your deployment, we'll be going over a few useful ones in the sections to come. You can learn more about supported commands [here](https://helm.sh/docs/helm/helm/).
+## Splunk Operator Chart
 
-## Splunk Operator deployments
+Inspect chart metadata and values:
 
-Installing the ```splunk/splunk-operator``` chart deploys the Splunk Operator with cluster-wide access. View the configurable values for the chart using the following command:
-
-```
-helm show values splunk/splunk-operator
-```
-
-### Configuring Splunk Operator deployments
-
-There are a couple ways you can configure your operator deployment
-
-1. Using a ```new_values.yaml``` file to override default values (Recommended)
-```
-helm install -f new_values.yaml <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
+```bash
+helm show chart "${SPLUNK_HELM_OCI_BASE}/splunk-operator" --version "${SPLUNK_OPERATOR_CHART_VERSION}"
+helm show values "${SPLUNK_HELM_OCI_BASE}/splunk-operator" --version "${SPLUNK_OPERATOR_CHART_VERSION}"
 ```
 
-2. Using the Helm CLI directly to set new values
-```
-helm install --set <KEY>=<VALUE> <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
+Install the operator with a values file:
+
+```bash
+helm install -f new_values.yaml splunk-operator-test \
+  "${SPLUNK_HELM_OCI_BASE}/splunk-operator" \
+  --version "${SPLUNK_OPERATOR_CHART_VERSION}" \
+  -n splunk-operator
 ```
 
-If the release already exists, we can use ```helm upgrade``` to configure and upgrade the deployment using a file or the CLI directly as above.
+Install the operator with CLI overrides:
 
-```
-helm upgrade -f new_values.yaml <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
+```bash
+helm install splunk-operator-test \
+  "${SPLUNK_HELM_OCI_BASE}/splunk-operator" \
+  --version "${SPLUNK_OPERATOR_CHART_VERSION}" \
+  --set splunkOperator.clusterWideAccess=false \
+  -n splunk-operator
 ```
 
-Read more about configuring values [here](https://helm.sh/docs/intro/using_helm/).
+Upgrade an existing release:
 
-In the following example, we will install and upgrade the Splunk Operator.
+```bash
+helm upgrade -f new_values.yaml splunk-operator-test \
+  "${SPLUNK_HELM_OCI_BASE}/splunk-operator" \
+  --version "${SPLUNK_OPERATOR_CHART_VERSION}" \
+  -n splunk-operator
+```
 
-Specify the release name and namespace to install the Operator:
+Uninstall the operator:
 
-```
-helm install splunk-operator-test splunk/splunk-operator -n splunk-operator
-```
-```
-NAME: splunk-operator-test
-LAST DEPLOYED: Tue Aug 23 12:47:57 2022
-NAMESPACE: splunk-operator
-STATUS: deployed
-REVISION: 1
-TEST SUITE: None
-```
-```
-NAME                                                  READY   STATUS    RESTARTS   AGE
-splunk-operator-controller-manager-545cccf79f-9xpll   2/2     Running   0          2m14s
-```
-The ```helm list``` command can be used to retrieve all deployed releases.
-
-By default, the Splunk Operator has cluster-wide access. Let's upgrade the ```splunk-operator-test``` release by revoking cluster-wide access:
-```
-helm upgrade --set splunkOperator.clusterWideAccess=false splunk-operator-test splunk/splunk-operator -n splunk-operator
-```
-```
-NAME: splunk-operator-test
-LAST DEPLOYED: Tue Aug 23 12:53:08 2022
-NAMESPACE: splunk-operator
-STATUS: deployed
-REVISION: 2
-TEST SUITE: None
-```
-Finally, let's terminate the Splunk Operator by uninstalling the ```splunk-operator-test``` release:
-```
+```bash
 helm uninstall splunk-operator-test -n splunk-operator
 ```
-```
-release "splunk-operator-test" uninstalled
+
+## Splunk Enterprise Chart
+
+The `splunk-enterprise` chart depends on the `splunk-operator` chart. In the OCI publication flow that dependency is packaged as part of the published chart artifact, so you do not need to run `helm repo add` or manage a separate chart repository index for normal installs.
+
+Inspect chart metadata and values:
+
+```bash
+helm show chart "${SPLUNK_HELM_OCI_BASE}/splunk-enterprise" --version "${SPLUNK_OPERATOR_CHART_VERSION}"
+helm show values "${SPLUNK_HELM_OCI_BASE}/splunk-enterprise" --version "${SPLUNK_OPERATOR_CHART_VERSION}"
 ```
 
-## Splunk Enterprise deployments
+If the operator is already installed, disable the bundled operator dependency:
 
-The Splunk Enterprise chart allows you to install and configure Splunk Enterprise custom resources. The ```splunk/splunk-enterprise``` chart has the ```splunk/splunk-operator``` chart as a dependency by default. To satisfy the dependencies please use the following command:
+```bash
+helm install splunk-enterprise-test \
+  "${SPLUNK_HELM_OCI_BASE}/splunk-enterprise" \
+  --version "${SPLUNK_OPERATOR_CHART_VERSION}" \
+  --set splunk-operator.enabled=false \
+  -n splunk-operator
 ```
-helm dependency build splunk/splunk-enterprise
-```
-If the operator is already installed then you will need to disable the dependency:
-```
-helm install --set splunk-operator.enabled=false <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
-```
-Installing ```splunk/splunk-enterprise``` will deploy Splunk Enterprise custom resources according to your configuration, the following ```new_values.yaml``` file specifies override configurations to deploy a Cluster Manager, an Indexer Cluster and a Search Head Cluster.
 
-```
+Example values file:
+
+```yaml
 clusterManager:
   enabled: true
   name: cm-test
@@ -123,66 +119,63 @@ searchHeadCluster:
   enabled: true
   name: shc-test
 ```
-The configurations above will override values in ```splunk/splunk-enterprise``` values file.  To see all configurable values contained in the ```values.yaml``` file:
-```
-helm show values splunk/splunk-enterprise
+
+Install from that values file:
+
+```bash
+helm install -f new_values.yaml splunk-enterprise-test \
+  "${SPLUNK_HELM_OCI_BASE}/splunk-enterprise" \
+  --version "${SPLUNK_OPERATOR_CHART_VERSION}" \
+  -n splunk-operator
 ```
 
-To install a Splunk Enterprise deployment according to our configurations above:
-```
-helm install -f new_values.yaml splunk-enterprise-test splunk/splunk-enterprise -n splunk-operator
-```
-```
-NAME: splunk-enterprise-test
-LAST DEPLOYED: Tue Aug 23 12:11:48 2022
-NAMESPACE: splunk-operator
-STATUS: deployed
-REVISION: 1
-TEST SUITE: None
-```
-```
-splunk-cm-test-cluster-manager-0                      1/1     Running   0               11m
-splunk-idxc-test-indexer-0                            1/1     Running   0               5m49s
-splunk-idxc-test-indexer-1                            1/1     Running   0               5m49s
-splunk-idxc-test-indexer-2                            1/1     Running   0               5m49s
-splunk-operator-controller-manager-54979b7d88-9c54b   2/2     Running   0               11m
-splunk-shc-test-deployer-0                            1/1     Running   0               11m
-splunk-shc-test-search-head-0                         1/1     Running   0               11m
-splunk-shc-test-search-head-1                         1/1     Running   0               11m
-splunk-shc-test-search-head-2                         1/1     Running   0               11m
-```
-We can clean-up the deployed resources quickly by uninstalling the release:
-```
+Uninstall the enterprise release:
+
+```bash
 helm uninstall splunk-enterprise-test -n splunk-operator
 ```
+
+`helm uninstall` removes the Helm-managed resources. CRDs and PVCs still need to be cleaned up manually when appropriate.
+
+## Splunk Validated Architecture Examples
+
+Install a standalone S1 deployment:
+
+```bash
+helm install splunk-enterprise-s1 \
+  "${SPLUNK_HELM_OCI_BASE}/splunk-enterprise" \
+  --version "${SPLUNK_OPERATOR_CHART_VERSION}" \
+  --set s1.enabled=true \
+  -n splunk-operator
 ```
-release "splunk-enterprise-test" uninstalled
-```
-```helm uninstall``` terminates all resources deployed by Helm including Persistent Volume Claims created for Splunk Enterprise resources.
 
-Note: Helm by default does not cleanup Custom Resource Definitions and Persistent Volume Claims. Splunk Admin needs to manually clean them.
-
-### Troubleshooting Splunk Enterprise Deployments
-
-#### CRDs are not installed
-If you attempt to install a Splunk Enterprise deployment, and there is an error that says:
-```
-Error: INSTALLATION FAILED: unable to build kubernetes objects from release manifest: resource mapping not found for name: "release-name" namespace: "release-namespace" from "": no matches for kind "Standalone" in version "enterprise.splunk.com/v4"
-ensure CRDs are installed first
-```
-
-Verify that the CRDs have been installed with the instructions at the [top of this documentation](#splunk-operator-helm-chart-repository).
-
-## Splunk Validated Architecture deployments
-
-The Splunk Enterprise chart has support for three Splunk Validated Architectures:
+The `splunk-enterprise` chart also supports:
 
 - [Single Server Deployment (S1)](https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=9)
 - [Distributed Clustered Deployment + SHC - Single Site (C3)](https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=14)
 - [Distributed Clustered Deployment + SHC - Multi-Site (M4)](https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=20)
 
-Install a Standalone deployment using the following command:
+## Troubleshooting
+
+If Helm reports that Splunk custom resources are unknown, install or update the CRDs first:
+
+```text
+Error: INSTALLATION FAILED: unable to build kubernetes objects from release manifest: resource mapping not found ...
+ensure CRDs are installed first
 ```
-helm install --set s1.enabled=true <RELEASE_NAME> splunk/splunk-enterprise -n <RELEASE_NAMESPACE>
+
+For chart values and defaults in the source tree, see:
+
+- [splunk-operator values](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-operator/values.yaml)
+- [splunk-enterprise values](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-enterprise/values.yaml)
+
+## Legacy Compatibility Repository
+
+The legacy GitHub Pages repository remains compatibility-only:
+
+```bash
+helm repo add splunk https://splunk.github.io/splunk-operator/
+helm repo update
 ```
-Visit the Splunk Operator github repository to learn more about the configurable values of [splunk/splunk-operator](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-operator/values.yaml) and [splunk/splunk-enterprise](https://github.com/splunk/splunk-operator/blob/develop/helm-chart/splunk-enterprise/values.yaml).
+
+Use that path only for older consumers that still require an `index.yaml` based Helm repository. New automation and release validation should use OCI chart references.

@@ -1,5 +1,8 @@
 # Artifact Hub repository metadata file
 #
+# This file is kept as a legacy compatibility consumer while OCI chart publication
+# replaces the old index.yaml-based Helm distribution path.
+#
 # Some settings like the verified publisher flag or the ignored packages won't
 # be applied until the next time the repository is processed. Please keep in
 # mind that the repository won't be processed if it has not changed since the

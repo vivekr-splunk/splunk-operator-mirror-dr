@@ -417,6 +417,12 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
             "release_notes_target": first_non_empty(env.get("STAGING_RELEASE_NOTES_TARGET"), default="unset"),
             "bundle_registry": first_non_empty(env.get("STAGING_BUNDLE_REGISTRY"), default="unset"),
             "chart_repository": first_non_empty(env.get("STAGING_CHART_RELEASE_REPOSITORY"), default="unset"),
+            "official_chart_repository": first_non_empty(
+                env.get("OFFICIAL_CHART_RELEASE_REPOSITORY"), default="unset"
+            ),
+            "chart_legacy_index_required": first_non_empty(
+                env.get("STAGING_CHART_LEGACY_INDEX_REQUIRED"), default="false"
+            ),
             "certification_registry": first_non_empty(env.get("STAGING_CERTIFICATION_REGISTRY"), default="unset"),
             "psr_project": first_non_empty(env.get("STAGING_PSR_PROJECT_PATH"), default="psr/k8s-operator"),
             "psr_base_version": psr_base_version,
@@ -474,6 +480,8 @@ def write_dotenv(path: Path, manifest: dict[str, object]) -> None:
         f"SOK_RELEASE_BUCKET={release['release_bucket']}",
         f"SOK_RELEASE_NOTES_TARGET={release['release_notes_target']}",
         f"SOK_CHART_REPOSITORY={release['chart_repository']}",
+        f"SOK_OFFICIAL_CHART_REPOSITORY={release['official_chart_repository']}",
+        f"SOK_CHART_LEGACY_INDEX_REQUIRED={release['chart_legacy_index_required']}",
         f"SOK_CERTIFICATION_REGISTRY={release['certification_registry']}",
         f"SOK_PSR_PROJECT={release['psr_project']}",
         f"SOK_PSR_BASE_VERSION={release['psr_base_version']}",

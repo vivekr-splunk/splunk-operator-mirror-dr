@@ -1,2 +1,4 @@
+# Legacy chart-releaser compatibility config.
+# OCI publication is the primary Helm distribution path; keep this only while an index.yaml consumer still exists.
 pages-branch: main
 pages-index-path: docs/index.yaml

@@ -45,6 +45,70 @@ strip_docker_io_prefix() {
   esac
 }
 
+strip_oci_prefix() {
+  oci_ref="$1"
+  case "${oci_ref}" in
+    oci://*)
+      printf '%s' "${oci_ref#oci://}"
+      ;;
+    *)
+      printf '%s' "${oci_ref}"
+      ;;
+  esac
+}
+
+oci_registry_host() {
+  oci_ref="$1"
+  stripped_ref="$(strip_oci_prefix "${oci_ref}")"
+  printf '%s' "${stripped_ref}" | cut -d/ -f1
+}
+
+normalize_chart_repository_base() {
+  repository_ref="$1"
+  stripped_ref="$(strip_oci_prefix "${repository_ref}")"
+  stripped_ref="${stripped_ref%/}"
+
+  case "${stripped_ref}" in
+    */splunk-operator|*/splunk-enterprise)
+      stripped_ref="${stripped_ref%/*}"
+      ;;
+  esac
+
+  printf 'oci://%s' "${stripped_ref}"
+}
+
+chart_repository_ref() {
+  repository_base="$1"
+  chart_name="$2"
+  normalized_base="${repository_base%/}"
+  printf '%s/%s' "${normalized_base}" "${chart_name}"
+}
+
+bool_is_true() {
+  case "${1:-}" in
+    1|true|TRUE|True|yes|YES|Yes|on|ON|On)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+helm_registry_login_with_password() {
+  registry_ref="$1"
+  username="$2"
+  password="$3"
+  registry_host="$(oci_registry_host "${registry_ref}")"
+
+  if [ -z "${registry_host}" ]; then
+    echo "Unable to determine OCI registry host from ${registry_ref}" >&2
+    return 1
+  fi
+
+  printf '%s' "${password}" | helm registry login "${registry_host}" --username "${username}" --password-stdin
+}
+
 resolve_enterprise_source_image() {
   target_branch="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-${CI_COMMIT_REF_NAME:-}}"
   source_mode="${SOK_SOURCE_MODE:-}"

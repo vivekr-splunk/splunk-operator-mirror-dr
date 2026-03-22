@@ -429,7 +429,7 @@ Interpretation:
     - `manual-int-test-workflow-rehearsal`
     - `nightly-int-test-workflow-rehearsal`
   - the EKS runtime now exports `TEST_TIMEOUT` so long-running suites can be tuned per workflow family instead of relying on the hard-coded `7h` default in `test/trigger-tests.sh`
-  - chart release now has a staging-safe dry-run script in:
+  - chart release now packages and lints both charts, can push them to the internal OCI chart target when auth is present, and validates installability from pulled OCI artifacts in:
     - `hack/gitlab-ci/release-charts-workflow-rehearsal.sh`
   - current machine-generated readiness audit summary:
     - runnable now:
