@@ -1302,7 +1302,7 @@ preflight-certification-rehearsal:
     SOURCE_WORKFLOW_FILE: openshift-preflight
     WORKFLOW_CLASS: release-certification
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_PREFLIGHT_CERTIFICATION
-    REQUIRED_VARS: STAGING_PREFLIGHT_DOCKERCONFIG,STAGING_PYXIS_API_TOKEN,STAGING_PYXIS_CERTIFICATION_COMPONENT_ID
+    REQUIRED_VARS: STAGING_PYXIS_API_TOKEN
     WORKFLOW_NOTES: Red Hat certification needs both bundle and container preflight coverage. GitLab should emit the exact commands, evidence, and gating policy before any partner-portal submission.
     WORKFLOW_PLAN: |
       1. Run preflight against the operator bundle image and release container images.
