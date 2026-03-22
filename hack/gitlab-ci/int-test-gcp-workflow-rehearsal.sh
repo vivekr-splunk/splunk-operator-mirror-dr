@@ -73,10 +73,10 @@ require_envs \
   STAGING_GCP_PROJECT_ID
 
 gcp_auth_mode="service-account-key"
-if [ -n "${STAGING_GCP_SERVICE_ACCOUNT_KEY:-}" ]; then
-  gcp_auth_mode="service-account-key"
-elif gcp_oidc_ready; then
+if gcp_oidc_ready; then
   gcp_auth_mode="oidc"
+elif [ -n "${STAGING_GCP_SERVICE_ACCOUNT_KEY:-}" ]; then
+  gcp_auth_mode="service-account-key"
 else
   require_envs STAGING_GCP_SERVICE_ACCOUNT_KEY
 fi
