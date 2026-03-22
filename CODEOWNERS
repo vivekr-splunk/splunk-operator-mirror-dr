@@ -1,0 +1,7 @@
+* @okta-groups/sg-cloud-sok-developer-platform
+
+/.gitlab-ci.yml @okta-groups/sg-cloud-sok-developer-platform
+/hack/ @okta-groups/sg-cloud-sok-developer-platform
+/docs/ @okta-groups/sg-cloud-sok-developer-platform
+/helm-chart/ @okta-groups/sg-cloud-sok-developer-platform
+/release-process/ @okta-groups/sg-cloud-sok-developer-platform
