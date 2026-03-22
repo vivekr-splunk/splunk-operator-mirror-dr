@@ -723,6 +723,7 @@ distroless-build-test-push-rehearsal:
     - .workflow-rehearsal-template
     - .build-family
     - .rules-variant-runtime-or-main-or-mr
+  allow_failure: false
   variables:
     WORKFLOW_SLUG: distroless-build-test-push-workflow
     WORKFLOW_NAME: Build and Test Distroless

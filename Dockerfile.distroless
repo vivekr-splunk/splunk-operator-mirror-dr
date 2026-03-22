@@ -1,7 +1,14 @@
-# Build the manager binary
-FROM golang:1.24.2 AS builder
+ARG BUILDPLATFORM
+
+# Build the manager binary on the native builder platform and cross-compile to the
+# requested target architecture. This avoids running the Go toolchain under arm64
+# emulation during multi-arch buildx runs.
+FROM --platform=$BUILDPLATFORM golang:1.24.2 AS builder
 
 WORKDIR /workspace
+ARG TARGETOS
+ARG TARGETARCH
+
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
