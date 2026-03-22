@@ -16,6 +16,7 @@ oci_refs_file="rehearsal/${WORKFLOW_SLUG}-oci-refs.md"
 validation_dir="rehearsal/${WORKFLOW_SLUG}-validation"
 publication_state_file="rehearsal/${WORKFLOW_SLUG}-publication-state.txt"
 compatibility_state_file="rehearsal/${WORKFLOW_SLUG}-compatibility-state.txt"
+auth_requirements_file="rehearsal/${WORKFLOW_SLUG}-auth-requirements.md"
 
 mkdir -p "rehearsal" "${chart_output_dir}" "${validation_dir}"
 : > "${context_file}"
@@ -34,6 +35,7 @@ legacy_index_required="${STAGING_CHART_LEGACY_INDEX_REQUIRED:-false}"
 legacy_index_url="${STAGING_CHART_LEGACY_INDEX_URL:-}"
 chart_registry_username="${STAGING_CHART_RELEASE_USERNAME:-}"
 chart_registry_password="${STAGING_CHART_RELEASE_PASSWORD:-}"
+chart_registry_dockerconfig="${STAGING_CHART_RELEASE_DOCKERCONFIG:-}"
 
 install_helm_version "${HELM_VERSION}" "${ci_bin_dir}"
 
@@ -43,6 +45,7 @@ append_context "${context_file}" "chart_release_target" "${chart_release_target}
 append_context "${context_file}" "official_chart_release_target" "${official_chart_release_target}"
 append_context "${context_file}" "legacy_index_required" "${legacy_index_required}"
 append_context "${context_file}" "chart_output_dir" "${chart_output_dir}"
+append_context "${context_file}" "chart_registry_dockerconfig_present" "$([ -n "${chart_registry_dockerconfig}" ] && printf true || printf false)"
 
 helm version
 
@@ -68,6 +71,8 @@ publication_status="packaged-only"
 internal_publish_validated="false"
 legacy_index_generated="false"
 internal_auth_mode="none"
+auth_requirements_summary="missing chart publish credentials"
+missing_auth_inputs="STAGING_CHART_RELEASE_USERNAME+STAGING_CHART_RELEASE_PASSWORD or STAGING_CHART_RELEASE_DOCKERCONFIG"
 
 if printf '%s' "${chart_release_target}" | grep -q '^oci://'; then
   normalized_internal_chart_base="$(normalize_chart_repository_base "${chart_release_target}")"
@@ -112,8 +117,15 @@ EOF
 
   if [ -n "${chart_registry_username}" ] && [ -n "${chart_registry_password}" ]; then
     internal_auth_mode="explicit-credentials"
+    auth_requirements_summary="username/password credentials loaded"
     helm_registry_login_with_password "${normalized_internal_chart_base}" "${chart_registry_username}" "${chart_registry_password}"
+  elif [ -n "${chart_registry_dockerconfig}" ]; then
+    internal_auth_mode="dockerconfig"
+    auth_requirements_summary="docker config credentials loaded"
+    helm_registry_login_with_dockerconfig "${normalized_internal_chart_base}" "${chart_registry_dockerconfig}"
+  fi
 
+  if [ "${internal_auth_mode}" != "none" ]; then
     helm push "${operator_chart_archive}" "${normalized_internal_chart_base}"
     helm push "${enterprise_chart_archive}" "${normalized_internal_chart_base}"
 
@@ -154,12 +166,32 @@ if bool_is_true "${legacy_index_required}" && [ "${legacy_index_generated}" != "
   legacy_index_generated="true"
 fi
 
+cat > "${auth_requirements_file}" <<EOF
+# Helm OCI Auth Requirements
+
+- internal_chart_target: ${chart_release_target}
+- official_chart_target: ${official_chart_release_target}
+- supported_internal_auth_modes:
+  - username/password via \`STAGING_CHART_RELEASE_USERNAME\` and \`STAGING_CHART_RELEASE_PASSWORD\`
+  - docker config file via \`STAGING_CHART_RELEASE_DOCKERCONFIG\`
+- selected_internal_auth_mode: ${internal_auth_mode}
+- auth_status: ${auth_requirements_summary}
+- missing_inputs_when_auth_pending: ${missing_auth_inputs}
+- required_internal_permissions:
+  - push on the internal chart path for \`splunk-operator\` and \`splunk-enterprise\`
+  - pull on the same path for OCI validation after publish
+- release_note:
+  - the release lane publishes to the internal OCI target first and validates by pulling/rendering from the published OCI refs
+  - the official GA OCI destination is configured separately through \`OFFICIAL_CHART_RELEASE_REPOSITORY\`
+EOF
+
 printf '%s\n' "${publication_status}" > "${publication_state_file}"
 cat > "${compatibility_state_file}" <<EOF
 legacy_index_required=${legacy_index_required}
 legacy_index_generated=${legacy_index_generated}
 official_chart_release_target=${official_chart_release_target}
 internal_auth_mode=${internal_auth_mode}
+chart_registry_dockerconfig_present=$([ -n "${chart_registry_dockerconfig}" ] && printf true || printf false)
 EOF
 
 cat > "${publication_plan}" <<EOF

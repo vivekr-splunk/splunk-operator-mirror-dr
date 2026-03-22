@@ -109,6 +109,78 @@ helm_registry_login_with_password() {
   printf '%s' "${password}" | helm registry login "${registry_host}" --username "${username}" --password-stdin
 }
 
+ensure_python3() {
+  if command -v python3 >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y python3
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y python3
+  elif command -v apk >/dev/null 2>&1; then
+    apk add --no-cache python3
+  else
+    echo "No supported package manager found to install python3" >&2
+    return 1
+  fi
+}
+
+helm_registry_login_with_dockerconfig() {
+  registry_ref="$1"
+  dockerconfig_path="$2"
+  registry_host="$(oci_registry_host "${registry_ref}")"
+
+  if [ -z "${registry_host}" ]; then
+    echo "Unable to determine OCI registry host from ${registry_ref}" >&2
+    return 1
+  fi
+
+  if [ ! -f "${dockerconfig_path}" ]; then
+    echo "Missing docker config file: ${dockerconfig_path}" >&2
+    return 1
+  fi
+
+  ensure_python3
+
+  auth_payload="$(python3 - "${dockerconfig_path}" "${registry_host}" <<'PY'
+import base64
+import json
+import sys
+from pathlib import Path
+
+dockerconfig_path = Path(sys.argv[1])
+registry_host = sys.argv[2]
+payload = json.loads(dockerconfig_path.read_text(encoding="utf-8"))
+auths = payload.get("auths", {})
+entry = auths.get(registry_host)
+if entry is None and f"https://{registry_host}" in auths:
+    entry = auths[f"https://{registry_host}"]
+if entry is None and f"http://{registry_host}" in auths:
+    entry = auths[f"http://{registry_host}"]
+if not entry or "auth" not in entry:
+    raise SystemExit(1)
+decoded = base64.b64decode(entry["auth"]).decode("utf-8")
+print(decoded)
+PY
+)" || {
+    echo "Unable to extract OCI registry auth for ${registry_host} from ${dockerconfig_path}" >&2
+    return 1
+  }
+
+  username="${auth_payload%%:*}"
+  password="${auth_payload#*:}"
+  if [ -z "${username}" ] || [ "${password}" = "${auth_payload}" ]; then
+    echo "Invalid auth payload for ${registry_host} in ${dockerconfig_path}" >&2
+    return 1
+  fi
+
+  helm_registry_login_with_password "${registry_ref}" "${username}" "${password}"
+}
+
 resolve_enterprise_source_image() {
   target_branch="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-${CI_COMMIT_REF_NAME:-}}"
   source_mode="${SOK_SOURCE_MODE:-}"

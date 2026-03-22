@@ -22,6 +22,17 @@ Example internal rehearsal base:
 export SPLUNK_HELM_OCI_BASE=oci://docker.repo.splunkdev.net/helm
 ```
 
+Internal rehearsal and RC validation require registry auth before Helm can pull from the internal OCI host. The release lane supports either explicit username/password credentials or a Docker config file carrying auth for `docker.repo.splunkdev.net`.
+
+Example login:
+
+```bash
+printf '%s' "${SPLUNK_HELM_OCI_PASSWORD}" | \
+  helm registry login docker.repo.splunkdev.net \
+  --username "${SPLUNK_HELM_OCI_USERNAME}" \
+  --password-stdin
+```
+
 ## CRDs
 
 Users must install the latest CRDs manually before the first Helm install. This is a [Helm limitation](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/). The `splunk-operator` chart does not carry the CRDs because they exceed Helm chart size limits.
