@@ -31,7 +31,8 @@ load_repo_dotenv "${CI_PROJECT_DIR}/.env"
 load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-controller/release-cycle.env"
 
 current_version="$(awk '/^VERSION[[:space:]]*\?/ {print $3; exit}' "${CI_PROJECT_DIR}/Makefile")"
-release_version="${SOK_RELEASE_CANDIDATE_VERSION:-${SOK_TARGET_RELEASE_VERSION:-${current_version}}}"
+release_version="${STAGING_PREFLIGHT_RELEASE_TAG:-${SOK_TARGET_RELEASE_VERSION:-${current_version}}}"
+release_candidate_version="${SOK_RELEASE_CANDIDATE_VERSION:-unset}"
 resolve_staging_image_repository "${STAGING_RELEASE_REPOSITORY}" "splunk/splunk-operator"
 release_repository="${RESOLVED_IMAGE_REPOSITORY}"
 bundle_registry="${STAGING_BUNDLE_REGISTRY:-${STAGING_CERTIFICATION_REGISTRY:-unset}}"
@@ -92,6 +93,7 @@ append_context "${context_file}" "release_version" "${release_version}"
 append_context "${context_file}" "bundle_image" "${bundle_image}"
 append_context "${context_file}" "container_image" "${container_image}"
 append_context "${context_file}" "distroless_image" "${distroless_image}"
+append_context "${context_file}" "release_candidate_version" "${release_candidate_version}"
 append_context "${context_file}" "release_repository" "${release_repository}"
 append_context "${context_file}" "preflight_version" "${preflight_version}"
 append_context "${context_file}" "pyxis_identifier_flag" "${identifier_flag}"
@@ -109,6 +111,7 @@ cat > "${commands_file}" <<EOF
 - operator bundle image: ${bundle_image}
 - container image: ${container_image}
 - distroless container image: ${distroless_image}
+- release candidate ordinal: ${release_candidate_version}
 - pyxis identifier flag: ${identifier_flag}
 - pyxis identifier value: ${identifier_value}
 - docker auth: $(if [ -f "${dockerconfig_file}" ]; then printf '%s' 'configured'; else printf '%s' 'not-required'; fi)
