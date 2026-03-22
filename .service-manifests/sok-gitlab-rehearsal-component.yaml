@@ -1,0 +1,25 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: splunk-operator-gitlab-rehearsal
+  title: Splunk Operator GitLab Rehearsal
+  description: >
+    Official SOK GitLab rehearsal repository used to validate migration,
+    delivery, qualification, release, and certification automation before
+    promoting the final source of truth to GitLab.
+  functionalDomain:
+    - internal
+  annotations:
+    backstage.io/source-location: url:https://cd.splunkdev.com/sok/splunk-operator-rehearsal
+    backstage.io/view-url: https://cd.splunkdev.com/sok/splunk-operator-rehearsal/-/blob/main/.service-manifests/sok-gitlab-rehearsal-component.yaml
+    backstage.io/edit-url: https://cd.splunkdev.com/sok/splunk-operator-rehearsal/-/edit/main/.service-manifests/sok-gitlab-rehearsal-component.yaml
+  tags:
+    - sok
+    - gitlab
+    - rehearsal
+    - operator
+    - kubernetes
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:sg-cloud-sok-developer-platform
