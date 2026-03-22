@@ -22,6 +22,8 @@ RAW_FILES = [
     "compatibility-decision.json",
     "compatibility-publish-plan.json",
     "compatibility-publish-plan.md",
+    "chart-publication-record.json",
+    "chart-publication-record.md",
     "blocker-summary.json",
     "psr-qualification-verdict.json",
     "psr-qualification-verdict.md",
@@ -65,6 +67,7 @@ def build_summary(rehearsal_dir: Path, controller_dir: Path) -> dict[str, object
     lane_selection = json.loads((controller_dir / "lane-selection.json").read_text(encoding="utf-8"))
     compatibility = load_optional_json(controller_dir / "compatibility-record.json")
     publish_plan = load_optional_json(controller_dir / "compatibility-publish-plan.json")
+    chart_publication = load_optional_json(controller_dir / "chart-publication-record.json")
     blocker_summary = load_optional_json(controller_dir / "blocker-summary.json")
     psr_verdict = load_optional_json(controller_dir / "psr-qualification-verdict.json")
     qualification_report = load_optional_text(controller_dir / "qualification-report.md")
@@ -119,6 +122,7 @@ def build_summary(rehearsal_dir: Path, controller_dir: Path) -> dict[str, object
             "missing_jobs": compatibility.get("missing_jobs", []) if isinstance(compatibility, dict) else [],
         },
         "blockers": blocker_summary if isinstance(blocker_summary, dict) else None,
+        "chart_publication": chart_publication if isinstance(chart_publication, dict) else None,
         "psr_verdict": psr_verdict if isinstance(psr_verdict, dict) else None,
         "raw_files": [],
         "qualification_report_excerpt": (
@@ -196,6 +200,8 @@ def render_markdown(summary: dict[str, object]) -> str:
     pages = summary.get("pages", {})
     blockers = summary.get("blockers") or {}
     blocker_counts = blockers.get("bucket_counts", {}) if isinstance(blockers, dict) else {}
+    chart_publication = summary.get("chart_publication") or {}
+    compatibility_assets = chart_publication.get("compatibility_assets", []) if isinstance(chart_publication, dict) else []
     psr_verdict = summary.get("psr_verdict") or {}
 
     lines = [
@@ -213,6 +219,14 @@ def render_markdown(summary: dict[str, object]) -> str:
         f"- SOK baseline: `{sok['baseline_version']}`",
         f"- target release: `{sok['target_release_version']}`",
         f"- release candidate: `{sok['release_candidate_version']}`",
+        "",
+        "## Charts",
+        "",
+        f"- publication status: `{chart_publication.get('publication_status', 'pending')}`",
+        f"- validation mode: `{chart_publication.get('validation_mode', 'pending')}`",
+        f"- internal chart target: `{chart_publication.get('internal_chart_target', 'unset')}`",
+        f"- official chart target: `{chart_publication.get('official_chart_target', 'unset')}`",
+        f"- compatibility assets: `{len(compatibility_assets)}`",
         "",
         "## Pages",
         "",
@@ -247,6 +261,8 @@ def write_html(path: Path, summary: dict[str, object]) -> None:
     pages = summary.get("pages", {})
     blockers = summary.get("blockers") or {}
     blocker_counts = blockers.get("bucket_counts", {}) if isinstance(blockers, dict) else {}
+    chart_publication = summary.get("chart_publication") or {}
+    compatibility_assets = chart_publication.get("compatibility_assets", []) if isinstance(chart_publication, dict) else []
     psr_verdict = summary.get("psr_verdict") or {}
     raw_files = summary["raw_files"]
     evidence = summary.get("evidence", {})
@@ -257,6 +273,20 @@ def write_html(path: Path, summary: dict[str, object]) -> None:
     )
     raw_files_markup = "\n".join(
         f'<li><a href="{html.escape("data/" + item)}"><code>{html.escape("data/" + item)}</code></a></li>' for item in raw_files
+    ) or "<li>none</li>"
+    compatibility_assets_markup = "\n".join(
+        (
+            "<li>"
+            f"<code>{html.escape(str(asset.get('name', 'unknown')))}</code> "
+            f"({html.escape(str(asset.get('kind', 'unknown')))})"
+            + (
+                f' - <a href="{html.escape(str(asset.get("artifact_url")))}">artifact</a>'
+                if asset.get("artifact_url") and asset.get("artifact_url") != "unavailable"
+                else ""
+            )
+            + "</li>"
+        )
+        for asset in compatibility_assets
     ) or "<li>none</li>"
     current_dashboard_link = (
         f'<a href="{html.escape(str(pages.get("current_url")))}">{html.escape(str(pages.get("current_url")))}</a>'
@@ -362,6 +392,21 @@ def write_html(path: Path, summary: dict[str, object]) -> None:
       <li>Target release version: <code>{html.escape(str(sok['target_release_version']))}</code></li>
       <li>Release candidate: <code>{html.escape(str(sok['release_candidate_version']))}</code></li>
       <li>Release branch: <code>{html.escape(str(sok['release_branch'] or 'not-required'))}</code></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Chart Publication</h2>
+    <ul>
+      <li>Publication status: <code>{html.escape(str(chart_publication.get('publication_status', 'pending')))}</code></li>
+      <li>Validation mode: <code>{html.escape(str(chart_publication.get('validation_mode', 'pending')))}</code></li>
+      <li>Internal chart target: <code>{html.escape(str(chart_publication.get('internal_chart_target', 'unset')))}</code></li>
+      <li>Official chart target: <code>{html.escape(str(chart_publication.get('official_chart_target', 'unset')))}</code></li>
+      <li>Internal auth mode: <code>{html.escape(str(chart_publication.get('internal_auth_mode', 'unset')))}</code></li>
+      <li>Compatibility assets intended for the GitLab release record:</li>
+    </ul>
+    <ul>
+      {compatibility_assets_markup}
     </ul>
   </section>
 

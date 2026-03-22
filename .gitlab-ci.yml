@@ -1303,13 +1303,14 @@ release-charts-workflow-rehearsal:
     WORKFLOW_CLASS: release-charts
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_CHART_RELEASE
     REQUIRED_VARS: ""
-    WORKFLOW_NOTES: GitHub chart-releaser output is replaced by GitLab-driven OCI chart publication. Internal OCI push runs when staging chart registry auth is present through username/password or dockerconfig inputs; the final GA OCI target is configured separately via OFFICIAL_CHART_RELEASE_REPOSITORY; GitHub Pages remains compatibility-only.
+    WORKFLOW_NOTES: GitHub chart-releaser output is replaced by GitLab-driven OCI chart publication. Internal OCI push runs when staging chart registry auth is present through username/password or dockerconfig inputs; the final GA OCI target is configured separately via OFFICIAL_CHART_RELEASE_REPOSITORY; packaged .tgz charts become compatibility assets for the GitLab release object; GitHub Pages remains compatibility-only.
     WORKFLOW_PLAN: |
       1. Package and lint both charts in GitLab.
       2. Publish them to an internal OCI chart repository first when internal chart registry auth is available through explicit credentials or a docker config file.
       3. Validate installability from the published OCI refs before any official publication.
-      4. Generate a legacy index only when a compatibility consumer still requires it.
-      5. Keep the public GitHub Pages helm repo unchanged during rehearsal.
+      4. Preserve the packaged chart archives as compatibility assets for the GitLab release object.
+      5. Generate a legacy index only when a compatibility consumer still requires it.
+      6. Keep the public GitHub Pages helm repo unchanged during rehearsal.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/release-charts-workflow-rehearsal.sh
   artifacts:
     when: always
