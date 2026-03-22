@@ -19,6 +19,7 @@ def main() -> int:
         next_jobs = [
             "pre-release-workflow-rehearsal",
             "automated-release-workflow-rehearsal",
+            "release-image-stage-rehearsal",
             "psr-release-qualification-rehearsal",
             "psr-release-qualification-dispatch",
             "psr-release-qualification-collect",
@@ -26,7 +27,8 @@ def main() -> int:
             "bundle-push-post-release-rehearsal",
             "preflight-certification-rehearsal",
             "docker-splunk-preflight-certification-rehearsal",
-            "ecosystem-submission-rehearsal",
+            "certified-operators-submission-rehearsal",
+            "community-operators-submission-rehearsal",
             "release-branch-to-main-rehearsal",
         ]
         approval_gate = "rc-to-ga-promotion"

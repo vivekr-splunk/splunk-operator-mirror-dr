@@ -37,9 +37,24 @@ resolve_staging_image_repository "${STAGING_RELEASE_REPOSITORY}" "splunk/splunk-
 release_repository="${RESOLVED_IMAGE_REPOSITORY}"
 bundle_registry="${STAGING_BUNDLE_REGISTRY:-${STAGING_CERTIFICATION_REGISTRY:-unset}}"
 operator_image_name="${ARTIFACTORY_SPLUNK_OPERATOR_IMAGE_NAME:-splunk-operator}"
+release_candidate_alias_tag="${release_version}-RC"
+staged_standard_image_file="${CI_PROJECT_DIR}/rehearsal/release-image-stage-workflow-output/standard-image-alias-ref.txt"
+staged_distroless_image_file="${CI_PROJECT_DIR}/rehearsal/release-image-stage-workflow-output/distroless-image-alias-ref.txt"
 bundle_image="${STAGING_PREFLIGHT_BUNDLE_IMAGE:-${bundle_registry}/${operator_image_name}-bundle:v${release_version}}"
-container_image="${STAGING_PREFLIGHT_CONTAINER_IMAGE:-${release_repository}:${release_version}}"
-distroless_image="${STAGING_PREFLIGHT_DISTROLESS_IMAGE:-${release_repository}:${release_version}-distroless}"
+if [ -n "${STAGING_PREFLIGHT_CONTAINER_IMAGE:-}" ]; then
+  container_image="${STAGING_PREFLIGHT_CONTAINER_IMAGE}"
+elif [ -f "${staged_standard_image_file}" ]; then
+  container_image="$(cat "${staged_standard_image_file}")"
+else
+  container_image="${release_repository}:${release_candidate_alias_tag}"
+fi
+if [ -n "${STAGING_PREFLIGHT_DISTROLESS_IMAGE:-}" ]; then
+  distroless_image="${STAGING_PREFLIGHT_DISTROLESS_IMAGE}"
+elif [ -f "${staged_distroless_image_file}" ]; then
+  distroless_image="$(cat "${staged_distroless_image_file}")"
+else
+  distroless_image="${release_repository}:${release_candidate_alias_tag}-distroless"
+fi
 project_id="${STAGING_PYXIS_CERTIFICATION_PROJECT_ID:-}"
 project_object_id="${STAGING_PYXIS_CERTIFICATION_PROJECT_OBJECT_ID:-}"
 component_id="${STAGING_PYXIS_CERTIFICATION_COMPONENT_ID:-}"
@@ -90,6 +105,7 @@ run_container_preflight "${distroless_image}" "${distroless_log}"
 run_bundle_preflight || bundle_status="failed"
 
 append_context "${context_file}" "release_version" "${release_version}"
+append_context "${context_file}" "release_candidate_alias_tag" "${release_candidate_alias_tag}"
 append_context "${context_file}" "bundle_image" "${bundle_image}"
 append_context "${context_file}" "container_image" "${container_image}"
 append_context "${context_file}" "distroless_image" "${distroless_image}"

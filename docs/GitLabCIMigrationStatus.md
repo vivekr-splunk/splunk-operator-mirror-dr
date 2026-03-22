@@ -290,10 +290,14 @@ Interpretation:
   - `compatibility-publish-rehearsal`: `success`
   - the release evidence matcher now records the executed release jobs with no false `missing jobs`
 - The release family now also models the remaining production release obligations as checked-in rehearsal stages:
+  - `release-image-stage-rehearsal`
   - `psr-release-qualification-rehearsal`
   - `preflight-certification-rehearsal`
   - `docker-splunk-preflight-certification-rehearsal`
-  - `ecosystem-submission-rehearsal`
+  - `certified-operators-submission-rehearsal`
+  - `community-operators-submission-rehearsal`
+  - `release-image-stage-rehearsal` closes the earlier gap where certification was targeting a release tag that had never been staged in rehearsal
+  - the catalog step is now split explicitly by downstream target instead of using one generic ecosystem placeholder
   - these remain staging-safe and plan-oriented until the required credentials and downstream integration contracts are approved
 - PSR release qualification now has a native GitLab bridge in addition to the checked-in matrix-planning job:
   - `release-manifest-resolve-rehearsal` now exports `rehearsal/release-controller/release-cycle.env` as a dotenv artifact so release-stage jobs can consume normalized release inputs directly

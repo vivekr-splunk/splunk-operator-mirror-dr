@@ -232,6 +232,9 @@ default:
 .release-family:
   stage: release
   interruptible: false
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: $GITLAB_OIDC_AUDIENCE
 
 .administration-family:
   stage: administration
@@ -1183,6 +1186,27 @@ automated-release-workflow-rehearsal:
       4. Record signing inputs, but do not require or perform cosign signing in this dry-run slice.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/automated-release-workflow-rehearsal.sh
 
+release-image-stage-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .needs-release-controller
+    - .rules-release-train-or-web-manual
+  before_script: []
+  variables:
+    WORKFLOW_SLUG: release-image-stage-workflow
+    WORKFLOW_NAME: Release Image Stage Workflow
+    SOURCE_WORKFLOW_FILE: .github/workflows/merge-develop-to-main-workflow.yml
+    WORKFLOW_CLASS: release-image-staging
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_RELEASE_IMAGE_STAGE
+    REQUIRED_VARS: STAGING_RELEASE_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION
+    WORKFLOW_NOTES: The GitHub release path stages release-candidate images before final publication. GitLab must build those RC-tagged images in the internal release repository first so certification and downstream catalog work operate on real release artifacts instead of planned tags.
+    WORKFLOW_PLAN: |
+      1. Build the standard and distroless operator images into the internal staging release repository.
+      2. Tag them with the current release-candidate tags only.
+      3. Record the staged image refs and digests for certification and downstream release jobs.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/release-image-stage-rehearsal.sh
+
 psr-release-qualification-rehearsal:
   extends:
     - .workflow-rehearsal-template
@@ -1294,8 +1318,15 @@ preflight-certification-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .release-family
-    - .needs-release-controller
     - .rules-release-train-or-web-manual
+  dependencies:
+    - lane-select-rehearsal
+    - release-image-stage-rehearsal
+  needs:
+    - job: lane-select-rehearsal
+      artifacts: true
+    - job: release-image-stage-rehearsal
+      artifacts: true
   variables:
     WORKFLOW_SLUG: preflight-certification-workflow
     WORKFLOW_NAME: Preflight Certification Workflow
@@ -1330,25 +1361,65 @@ docker-splunk-preflight-certification-rehearsal:
       3. Block downstream operator bundle and catalog submission until this prerequisite is green.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/docker-splunk-preflight-certification-rehearsal.sh
 
-ecosystem-submission-rehearsal:
+certified-operators-submission-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .release-family
-    - .needs-release-controller
     - .rules-release-train-or-web-manual
+  dependencies:
+    - lane-select-rehearsal
+    - preflight-certification-rehearsal
+    - docker-splunk-preflight-certification-rehearsal
+  needs:
+    - job: lane-select-rehearsal
+      artifacts: true
+    - job: preflight-certification-rehearsal
+      artifacts: true
+    - job: docker-splunk-preflight-certification-rehearsal
+      artifacts: true
   variables:
-    WORKFLOW_SLUG: ecosystem-submission-workflow
-    WORKFLOW_NAME: Ecosystem Submission Workflow
-    SOURCE_WORKFLOW_FILE: community-operators/redhat-certification
+    WORKFLOW_SLUG: certified-operators-submission-workflow
+    WORKFLOW_NAME: Certified Operators Submission Workflow
+    SOURCE_WORKFLOW_FILE: redhat-openshift-ecosystem/certified-operators
     WORKFLOW_CLASS: release-ecosystem-submission
-    EXECUTE_FLAG_NAME: STAGING_EXECUTE_ECOSYSTEM_SUBMISSION
-    REQUIRED_VARS: STAGING_OPERATORHUB_GITHUB_TOKEN,STAGING_RH_CERT_PROJECT_ID
-    WORKFLOW_NOTES: OperatorHub and Red Hat certification submissions are downstream of the canonical GitLab release. GitLab should automate PR-ready payloads and submission packs, but external review and approval remain outside GitLab control.
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_CERTIFIED_OPERATOR_SUBMISSION
+    REQUIRED_VARS:
+    WORKFLOW_NOTES: The certified-operators submission must follow the existing `splunk-operator` package layout and ci.yaml contract already present upstream. GitLab should prepare the exact PR payload and bundle metadata, but external PR creation stays disabled during rehearsal.
     WORKFLOW_PLAN: |
-      1. Prepare the OperatorHub and upstream-community-operators PR payloads.
-      2. Prepare the Red Hat certification submission pack from the release evidence bundle.
-      3. Keep external PR creation and partner-portal mutation disabled during rehearsal.
-    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/ecosystem-submission-rehearsal.sh
+      1. Prepare the `certified-operators` PR payload for package `splunk-operator`.
+      2. Keep `operators/splunk-operator/ci.yaml` aligned with the existing upstream contract unless a reviewed change is approved.
+      3. Block external PR creation during rehearsal and capture only the PR-ready payload plan.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/certified-operators-submission-rehearsal.sh
+
+community-operators-submission-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .rules-release-train-or-web-manual
+  dependencies:
+    - lane-select-rehearsal
+    - preflight-certification-rehearsal
+    - docker-splunk-preflight-certification-rehearsal
+  needs:
+    - job: lane-select-rehearsal
+      artifacts: true
+    - job: preflight-certification-rehearsal
+      artifacts: true
+    - job: docker-splunk-preflight-certification-rehearsal
+      artifacts: true
+  variables:
+    WORKFLOW_SLUG: community-operators-submission-workflow
+    WORKFLOW_NAME: Community Operators Submission Workflow
+    SOURCE_WORKFLOW_FILE: k8s-operatorhub/community-operators
+    WORKFLOW_CLASS: release-ecosystem-submission
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_COMMUNITY_OPERATOR_SUBMISSION
+    REQUIRED_VARS:
+    WORKFLOW_NOTES: The community-operators submission must follow the existing `splunk` package layout and ci.yaml contract already present upstream. GitLab should prepare the exact PR payload and reviewer/update-graph metadata, but external PR creation stays disabled during rehearsal.
+    WORKFLOW_PLAN: |
+      1. Prepare the `community-operators` PR payload for package `splunk`.
+      2. Keep `operators/splunk/ci.yaml` aligned with the current reviewers and `replaces-mode` contract unless a reviewed change is approved.
+      3. Block external PR creation during rehearsal and capture only the PR-ready payload plan.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/community-operators-submission-rehearsal.sh
 
 release-branch-to-main-rehearsal:
   extends:
@@ -1515,13 +1586,19 @@ qualification-report-rehearsal:
     - job: release-charts-workflow-rehearsal
       artifacts: true
       optional: true
+    - job: release-image-stage-rehearsal
+      artifacts: true
+      optional: true
     - job: preflight-certification-rehearsal
       artifacts: true
       optional: true
     - job: docker-splunk-preflight-certification-rehearsal
       artifacts: true
       optional: true
-    - job: ecosystem-submission-rehearsal
+    - job: certified-operators-submission-rehearsal
+      artifacts: true
+      optional: true
+    - job: community-operators-submission-rehearsal
       artifacts: true
       optional: true
     - job: release-branch-to-main-rehearsal
@@ -1539,9 +1616,11 @@ qualification-report-rehearsal:
     - psr-release-qualification-rehearsal
     - bundle-push-post-release-rehearsal
     - release-charts-workflow-rehearsal
+    - release-image-stage-rehearsal
     - preflight-certification-rehearsal
     - docker-splunk-preflight-certification-rehearsal
-    - ecosystem-submission-rehearsal
+    - certified-operators-submission-rehearsal
+    - community-operators-submission-rehearsal
     - release-branch-to-main-rehearsal
   script:
     - python3 hack/gitlab-ci/qualification-report-rehearsal.py

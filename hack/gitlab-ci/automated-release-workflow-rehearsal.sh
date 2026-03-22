@@ -24,11 +24,18 @@ load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-contro
 resolve_enterprise_source_image
 
 current_version="$(awk '/^VERSION[[:space:]]*\?/ {print $3; exit}' "${CI_PROJECT_DIR}/Makefile")"
+release_version="${SOK_TARGET_RELEASE_VERSION:-${current_version}}"
 enterprise_image="${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO}"
+release_candidate_version="${SOK_RELEASE_CANDIDATE_VERSION:-1}"
+release_candidate_tag="${release_version}-RC${release_candidate_version}"
+release_candidate_alias_tag="${release_version}-RC"
 
 resolve_staging_image_repository "${STAGING_RELEASE_REPOSITORY}" "splunk/splunk-operator"
 
-append_context "${context_file}" "release_version" "${current_version}"
+append_context "${context_file}" "release_version" "${release_version}"
+append_context "${context_file}" "release_candidate_version" "${release_candidate_version}"
+append_context "${context_file}" "release_candidate_tag" "${release_candidate_tag}"
+append_context "${context_file}" "release_candidate_alias_tag" "${release_candidate_alias_tag}"
 append_context "${context_file}" "release_branch" "${SOK_RELEASE_BRANCH:-}"
 append_context "${context_file}" "source_mode" "${RESOLVED_SOK_SOURCE_MODE}"
 append_context "${context_file}" "trigger_kind" "${RESOLVED_SOK_TRIGGER_KIND}"
@@ -40,23 +47,32 @@ append_context "${context_file}" "cosign_private_key_present" "true"
 append_context "${context_file}" "cosign_public_key_present" "true"
 
 cat > "${manifest_file}" <<EOF
-RELEASE_VERSION=${current_version}
-RELEASE_IMAGE=${RESOLVED_IMAGE_REPOSITORY}:${current_version}
-DISTROLESS_RELEASE_IMAGE=${RESOLVED_IMAGE_REPOSITORY}:${current_version}-distroless
+RELEASE_VERSION=${release_version}
+RELEASE_CANDIDATE_VERSION=${release_candidate_version}
+RC_IMAGE=${RESOLVED_IMAGE_REPOSITORY}:${release_candidate_alias_tag}
+RC_IMAGE_CANDIDATE=${RESOLVED_IMAGE_REPOSITORY}:${release_candidate_tag}
+RC_DISTROLESS_IMAGE=${RESOLVED_IMAGE_REPOSITORY}:${release_candidate_alias_tag}-distroless
+RC_DISTROLESS_IMAGE_CANDIDATE=${RESOLVED_IMAGE_REPOSITORY}:${release_candidate_tag}-distroless
+RELEASE_IMAGE=${RESOLVED_IMAGE_REPOSITORY}:${release_version}
+DISTROLESS_RELEASE_IMAGE=${RESOLVED_IMAGE_REPOSITORY}:${release_version}-distroless
 ENTERPRISE_IMAGE=${enterprise_image}
 RELEASE_BUCKET=${STAGING_RELEASE_BUCKET}
 RELEASE_NOTES_TARGET=${STAGING_RELEASE_NOTES_TARGET}
 EOF
 
 cat > "${signing_file}" <<EOF
-${RESOLVED_IMAGE_REPOSITORY}:${current_version}
-${RESOLVED_IMAGE_REPOSITORY}:${current_version}-distroless
+${RESOLVED_IMAGE_REPOSITORY}:${release_candidate_alias_tag}
+${RESOLVED_IMAGE_REPOSITORY}:${release_candidate_alias_tag}-distroless
+${RESOLVED_IMAGE_REPOSITORY}:${release_version}
+${RESOLVED_IMAGE_REPOSITORY}:${release_version}-distroless
 EOF
 
 cat > "${summary_file}" <<EOF
 Prepared a staging-safe automated-release dry run.
 
-- release_version: ${current_version}
+- release_version: ${release_version}
+- release_candidate_version: ${release_candidate_version}
+- release_candidate_alias_tag: ${release_candidate_alias_tag}
 - release_repository: ${RESOLVED_IMAGE_REPOSITORY}
 - release_bucket: ${STAGING_RELEASE_BUCKET}
 - release_notes_target: ${STAGING_RELEASE_NOTES_TARGET}
