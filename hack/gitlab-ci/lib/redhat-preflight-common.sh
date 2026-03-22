@@ -63,16 +63,25 @@ resolve_preflight_identifier() {
   identifier_flag=""
   identifier_value=""
 
-  if [ -n "${project_object_id}" ]; then
-    fetch_pyxis_project_metadata "${project_object_id}" "${pyxis_token}" "${metadata_file}"
-    identifier_flag="--certification-project-id"
-    identifier_value="${project_object_id}"
-  elif [ -n "${explicit_project_id}" ] && is_redhat_project_object_id "${explicit_project_id}"; then
-    identifier_flag="--certification-project-id"
-    identifier_value="${explicit_project_id}"
-  elif [ -n "${explicit_component_id}" ]; then
+  if [ -n "${explicit_component_id}" ]; then
     identifier_flag="--certification-component-id"
     identifier_value="${explicit_component_id}"
+  elif [ -n "${project_object_id}" ]; then
+    fetch_pyxis_project_metadata "${project_object_id}" "${pyxis_token}" "${metadata_file}"
+    identifier_value="$(jq -r '.container.isv_pid // .pid // empty' "${metadata_file}")"
+    if [ -z "${identifier_value}" ]; then
+      echo "Unable to derive a Red Hat certification component id from project object ${project_object_id}" >&2
+      return 1
+    fi
+    identifier_flag="--certification-component-id"
+  elif [ -n "${explicit_project_id}" ] && is_redhat_project_object_id "${explicit_project_id}"; then
+    fetch_pyxis_project_metadata "${explicit_project_id}" "${pyxis_token}" "${metadata_file}"
+    identifier_value="$(jq -r '.container.isv_pid // .pid // empty' "${metadata_file}")"
+    if [ -z "${identifier_value}" ]; then
+      echo "Unable to derive a Red Hat certification component id from project object ${explicit_project_id}" >&2
+      return 1
+    fi
+    identifier_flag="--certification-component-id"
   elif [ -n "${explicit_project_id}" ]; then
     identifier_flag="--certification-component-id"
     identifier_value="${explicit_project_id}"
@@ -83,6 +92,22 @@ resolve_preflight_identifier() {
 
   export identifier_flag
   export identifier_value
+}
+
+apply_staging_aws_credentials() {
+  if [ -n "${STAGING_AWS_ACCESS_KEY_ID:-}" ] && [ -n "${STAGING_AWS_SECRET_ACCESS_KEY:-}" ]; then
+    export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
+    export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
+  fi
+
+  if [ -n "${STAGING_AWS_SESSION_TOKEN:-}" ]; then
+    export AWS_SESSION_TOKEN="${STAGING_AWS_SESSION_TOKEN}"
+  fi
+
+  if [ -n "${STAGING_AWS_DEFAULT_REGION:-}" ]; then
+    export AWS_DEFAULT_REGION="${STAGING_AWS_DEFAULT_REGION}"
+    export AWS_REGION="${STAGING_AWS_DEFAULT_REGION}"
+  fi
 }
 
 write_registry_auth() {

@@ -82,6 +82,7 @@ run_bundle_preflight() {
 require_envs STAGING_PYXIS_API_TOKEN
 install_preflight_release_binary "${preflight_version}" "${preflight_bin_dir}"
 resolve_preflight_identifier "${project_id}" "${project_object_id}" "${component_id}" "${STAGING_PYXIS_API_TOKEN}" "${pyxis_metadata_file}"
+apply_staging_aws_credentials
 prepare_preflight_dockerconfig "${dockerconfig_secret}" "${dockerconfig_file}" "${container_image}" "${distroless_image}" "${bundle_image}" || true
 run_container_preflight "${container_image}" "${container_log}"
 run_container_preflight "${distroless_image}" "${distroless_log}"
