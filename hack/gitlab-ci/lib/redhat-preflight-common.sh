@@ -68,20 +68,12 @@ resolve_preflight_identifier() {
     identifier_value="${explicit_component_id}"
   elif [ -n "${project_object_id}" ]; then
     fetch_pyxis_project_metadata "${project_object_id}" "${pyxis_token}" "${metadata_file}"
-    identifier_value="$(jq -r '.container.isv_pid // .pid // empty' "${metadata_file}")"
-    if [ -z "${identifier_value}" ]; then
-      echo "Unable to derive a Red Hat certification component id from project object ${project_object_id}" >&2
-      return 1
-    fi
     identifier_flag="--certification-component-id"
+    identifier_value="${project_object_id}"
   elif [ -n "${explicit_project_id}" ] && is_redhat_project_object_id "${explicit_project_id}"; then
     fetch_pyxis_project_metadata "${explicit_project_id}" "${pyxis_token}" "${metadata_file}"
-    identifier_value="$(jq -r '.container.isv_pid // .pid // empty' "${metadata_file}")"
-    if [ -z "${identifier_value}" ]; then
-      echo "Unable to derive a Red Hat certification component id from project object ${explicit_project_id}" >&2
-      return 1
-    fi
     identifier_flag="--certification-component-id"
+    identifier_value="${explicit_project_id}"
   elif [ -n "${explicit_project_id}" ]; then
     identifier_flag="--certification-component-id"
     identifier_value="${explicit_project_id}"
