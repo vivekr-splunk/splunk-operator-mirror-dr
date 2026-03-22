@@ -292,6 +292,7 @@ Interpretation:
 - The release family now also models the remaining production release obligations as checked-in rehearsal stages:
   - `psr-release-qualification-rehearsal`
   - `preflight-certification-rehearsal`
+  - `docker-splunk-preflight-certification-rehearsal`
   - `ecosystem-submission-rehearsal`
   - these remain staging-safe and plan-oriented until the required credentials and downstream integration contracts are approved
 - PSR release qualification now has a native GitLab bridge in addition to the checked-in matrix-planning job:

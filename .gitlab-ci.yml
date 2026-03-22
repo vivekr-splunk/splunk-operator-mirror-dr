@@ -1303,12 +1303,32 @@ preflight-certification-rehearsal:
     WORKFLOW_CLASS: release-certification
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_PREFLIGHT_CERTIFICATION
     REQUIRED_VARS: STAGING_PYXIS_API_TOKEN
-    WORKFLOW_NOTES: Red Hat certification needs both bundle and container preflight coverage. GitLab should emit the exact commands, evidence, and gating policy before any partner-portal submission.
+    WORKFLOW_NOTES: This stage certifies the SOK release images and optional operator bundle against the Red Hat project for `splunk-operator`. Container certification is a prerequisite to any downstream catalog submission.
     WORKFLOW_PLAN: |
       1. Run preflight against the operator bundle image and release container images.
       2. Capture operator and container evidence as a release gate.
       3. Block ecosystem submission until the preflight evidence is green.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/preflight-certification-rehearsal.sh
+
+docker-splunk-preflight-certification-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .needs-release-controller
+    - .rules-release-train-or-web-manual
+  variables:
+    WORKFLOW_SLUG: docker-splunk-preflight-certification-workflow
+    WORKFLOW_NAME: Docker Splunk Preflight Certification Workflow
+    SOURCE_WORKFLOW_FILE: openshift-preflight/docker-splunk
+    WORKFLOW_CLASS: release-certification
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_DOCKER_SPLUNK_PREFLIGHT_CERTIFICATION
+    REQUIRED_VARS: STAGING_PYXIS_API_TOKEN,STAGING_DOCKER_SPLUNK_PYXIS_CERTIFICATION_PROJECT_OBJECT_ID
+    WORKFLOW_NOTES: The upstream docker-splunk container certification is a separate release prerequisite. GitLab should certify the release-cycle Splunk Enterprise image before SOK bundle submission proceeds.
+    WORKFLOW_PLAN: |
+      1. Resolve the release-cycle Splunk Enterprise image selected by the controller.
+      2. Run Red Hat preflight container certification against the docker-splunk certification project.
+      3. Block downstream operator bundle and catalog submission until this prerequisite is green.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/docker-splunk-preflight-certification-rehearsal.sh
 
 ecosystem-submission-rehearsal:
   extends:
@@ -1498,6 +1518,9 @@ qualification-report-rehearsal:
     - job: preflight-certification-rehearsal
       artifacts: true
       optional: true
+    - job: docker-splunk-preflight-certification-rehearsal
+      artifacts: true
+      optional: true
     - job: ecosystem-submission-rehearsal
       artifacts: true
       optional: true
@@ -1517,6 +1540,7 @@ qualification-report-rehearsal:
     - bundle-push-post-release-rehearsal
     - release-charts-workflow-rehearsal
     - preflight-certification-rehearsal
+    - docker-splunk-preflight-certification-rehearsal
     - ecosystem-submission-rehearsal
     - release-branch-to-main-rehearsal
   script:

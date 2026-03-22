@@ -25,6 +25,7 @@ def main() -> int:
             "release-charts-workflow-rehearsal",
             "bundle-push-post-release-rehearsal",
             "preflight-certification-rehearsal",
+            "docker-splunk-preflight-certification-rehearsal",
             "ecosystem-submission-rehearsal",
             "release-branch-to-main-rehearsal",
         ]
