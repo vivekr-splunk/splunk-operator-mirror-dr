@@ -1259,6 +1259,7 @@ psr-release-qualification-collect:
     - .rules-release-train-or-web-manual
   needs:
     - job: psr-release-qualification-dispatch
+      optional: true
   script:
     - python3 hack/gitlab-ci/psr-release-qualification-collect.py
   artifacts:
