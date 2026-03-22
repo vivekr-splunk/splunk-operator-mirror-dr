@@ -7,7 +7,7 @@ import os
 import shutil
 from pathlib import Path
 
-from lib.status_contract import load_job_artifacts, load_optional_json, load_optional_text
+from lib.status_contract import build_pages_cycle_prefix, load_job_artifacts, load_optional_json, load_optional_text
 
 
 RAW_FILES = [
@@ -132,6 +132,22 @@ def write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def write_text(path: Path, text: str) -> None:
+    path.write_text(text, encoding="utf-8")
+
+
+def derive_root_pages_url(cycle_url: str, cycle_prefix: str) -> str:
+    if not cycle_url:
+        return ""
+    suffix = f"/{cycle_prefix}/"
+    if cycle_url.endswith(suffix):
+        return cycle_url[: -len(suffix)] or "/"
+    suffix_no_trailing = f"/{cycle_prefix}"
+    if cycle_url.endswith(suffix_no_trailing):
+        return cycle_url[: -len(suffix_no_trailing)] or "/"
+    return cycle_url
+
+
 def render_list(items: list[str]) -> str:
     if not items:
         return "<li>none</li>"
@@ -170,6 +186,57 @@ def render_evidence_section(evidence: dict[str, list[str]]) -> str:
     )
 
 
+def render_markdown(summary: dict[str, object]) -> str:
+    cycle = summary["cycle"]
+    lane = summary["lane"]
+    splunk = summary["splunk"]
+    sok = summary["sok"]
+    status = summary["status"]
+    pipeline = summary["pipeline"]
+    pages = summary.get("pages", {})
+    blockers = summary.get("blockers") or {}
+    blocker_counts = blockers.get("bucket_counts", {}) if isinstance(blockers, dict) else {}
+    psr_verdict = summary.get("psr_verdict") or {}
+
+    lines = [
+        "# SOK Release And Qualification Status",
+        "",
+        f"- label: `{status['label']}`",
+        f"- lane: `{lane['selected']}`",
+        f"- cycle: `{cycle['id']}`",
+        f"- disposition: `{status['disposition']}`",
+        f"- next action: `{status['next_action']}`",
+        f"- pipeline: [{pipeline['id']}]({pipeline['url']})",
+        f"- ref: `{pipeline['ref_name']}`",
+        f"- commit: `{str(pipeline['commit_sha'])[:12]}`",
+        f"- Splunk version: `{splunk['version']}`",
+        f"- SOK baseline: `{sok['baseline_version']}`",
+        f"- target release: `{sok['target_release_version']}`",
+        f"- release candidate: `{sok['release_candidate_version']}`",
+        "",
+        "## Pages",
+        "",
+        f"- variant: `{pages.get('variant', 'unknown')}`",
+        f"- current dashboard: {pages.get('current_url', 'unavailable')}",
+        f"- cycle page: {pages.get('cycle_url', 'unavailable')}",
+        f"- cycle prefix: `{pages.get('cycle_prefix', 'unknown')}`",
+        "",
+        "## Blockers",
+        "",
+        f"- infra: `{blocker_counts.get('infra', 0)}`",
+        f"- test: `{blocker_counts.get('test', 0)}`",
+        f"- sok: `{blocker_counts.get('sok', 0)}`",
+        f"- splunk: `{blocker_counts.get('splunk', 0)}`",
+        f"- disposition reason: {status['disposition_reason']}",
+        "",
+        "## PSR",
+        "",
+        f"- verdict: `{psr_verdict.get('verdict', 'none')}`",
+        f"- pipeline: {psr_verdict.get('downstream_pipeline_url', 'unavailable')}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def write_html(path: Path, summary: dict[str, object]) -> None:
     cycle = summary["cycle"]
     lane = summary["lane"]
@@ -177,6 +244,7 @@ def write_html(path: Path, summary: dict[str, object]) -> None:
     sok = summary["sok"]
     status = summary["status"]
     pipeline = summary["pipeline"]
+    pages = summary.get("pages", {})
     blockers = summary.get("blockers") or {}
     blocker_counts = blockers.get("bucket_counts", {}) if isinstance(blockers, dict) else {}
     psr_verdict = summary.get("psr_verdict") or {}
@@ -190,6 +258,21 @@ def write_html(path: Path, summary: dict[str, object]) -> None:
     raw_files_markup = "\n".join(
         f'<li><a href="{html.escape("data/" + item)}"><code>{html.escape("data/" + item)}</code></a></li>' for item in raw_files
     ) or "<li>none</li>"
+    current_dashboard_link = (
+        f'<a href="{html.escape(str(pages.get("current_url")))}">{html.escape(str(pages.get("current_url")))}</a>'
+        if pages.get("current_url")
+        else "unavailable"
+    )
+    cycle_dashboard_link = (
+        f'<a href="{html.escape(str(pages.get("cycle_url")))}">{html.escape(str(pages.get("cycle_url")))}</a>'
+        if pages.get("cycle_url")
+        else "unavailable"
+    )
+    pages_description = (
+        "This root deployment always shows the latest successful release or qualification cycle."
+        if pages.get("variant") == "current"
+        else "This deployment preserves one specific release or qualification cycle at a stable path."
+    )
 
     html_text = f"""<!doctype html>
 <html lang="en">
@@ -230,7 +313,7 @@ def write_html(path: Path, summary: dict[str, object]) -> None:
   <div class="hero">
     <div class="eyebrow">SOK Release And Qualification Status</div>
     <h1>{html.escape(str(status['label']))}</h1>
-    <p>This page is generated automatically from the GitLab controller outputs in <code>sok/splunk-operator</code>. It is the live status surface for the current release or qualification cycle.</p>
+    <p>This page is generated automatically from the GitLab controller outputs in <code>sok/splunk-operator</code>. {html.escape(pages_description)}</p>
   </div>
 
   <div class="grid">
@@ -252,6 +335,15 @@ def write_html(path: Path, summary: dict[str, object]) -> None:
       <li>Ref: <code>{html.escape(str(pipeline['ref_name']))}</code></li>
       <li>Commit: <code>{html.escape(str(pipeline['commit_sha'])[:12])}</code></li>
       <li>Generated At: <code>{html.escape(str(summary['generated_at_utc']))}</code></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Pages Links</h2>
+    <ul>
+      <li>Current dashboard: {current_dashboard_link}</li>
+      <li>Cycle page: {cycle_dashboard_link}</li>
+      <li>Cycle prefix: <code>{html.escape(str(pages.get('cycle_prefix', 'unknown')))}</code></li>
     </ul>
   </section>
 
@@ -316,8 +408,25 @@ def main() -> int:
     summary = build_summary(rehearsal_dir, controller_dir)
     raw_files = copy_raw_files(controller_dir, raw_dir)
     summary["raw_files"] = raw_files
+    pipeline_mode = os.getenv("REHEARSAL_PIPELINE_MODE", "full")
+    pipeline_id = os.getenv("CI_PIPELINE_ID", "unknown")
+    pages_variant = os.getenv("SOK_PAGES_VARIANT", "current")
+    cycle_prefix = build_pages_cycle_prefix(pipeline_mode, pipeline_id)
+    if pages_variant == "current":
+        current_url = os.getenv("CI_PAGES_URL", os.getenv("SOK_PAGES_ROOT_URL", ""))
+        cycle_url = f"{current_url.rstrip('/')}/{cycle_prefix}/" if current_url else ""
+    else:
+        cycle_url = os.getenv("CI_PAGES_URL", "")
+        current_url = os.getenv("SOK_PAGES_ROOT_URL", "") or derive_root_pages_url(cycle_url, cycle_prefix)
+    summary["pages"] = {
+        "variant": pages_variant,
+        "cycle_prefix": cycle_prefix,
+        "current_url": current_url,
+        "cycle_url": cycle_url,
+    }
 
     write_json(public_dir / "status.json", summary)
+    write_text(public_dir / "status.md", render_markdown(summary))
     write_html(public_dir / "index.html", summary)
     return 0
 

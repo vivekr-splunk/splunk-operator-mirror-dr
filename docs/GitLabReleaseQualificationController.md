@@ -46,6 +46,20 @@ The controller emits artifacts under `rehearsal/release-controller/`:
 - `compatibility-publish-plan.json`
 - `compatibility-publish-plan.md`
 
+The status publication slice now turns those controller artifacts into two GitLab-native views:
+
+- `pages`
+  - publishes the current dashboard at the stable project Pages root
+- `pages-cycle`
+  - publishes one preserved dashboard per qualification or release pipeline at a path derived from:
+    - `REHEARSAL_PIPELINE_MODE`
+    - `CI_PIPELINE_ID`
+
+That split means stakeholders can see both:
+
+- the latest current state
+- the exact status snapshot for a specific release or qualification cycle
+
 ## What This Solves
 
 This closes several foundational gaps in the release and qualification model:
@@ -69,6 +83,6 @@ This is a controller bootstrap, not the final automation state. The product repo
 - automatic digest discovery and pinning from upstream image readiness
 - controller-driven triggering of the qualification and release families
 - real publication to Jira and the GitLab-native status surfaces:
-  - GitLab Pages for live cycle detail
+  - GitLab Pages current plus per-cycle dashboards for live cycle detail
   - org-managed `gitlab-slack` for transition alerts
 - automated escalation from qualification disposition into the executable product-release lane

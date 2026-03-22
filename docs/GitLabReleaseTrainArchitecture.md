@@ -218,6 +218,9 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
 - `develop` push should remain a fast check-in lane and must not be forced through the release train.
 - Public DockerHub or public ECR publication must never happen before GitLab has produced the canonical release result.
 - PSR is a release-quality gate, not a post-release report.
+- GitLab Pages should publish both:
+  - one stable current dashboard
+  - one preserved per-cycle dashboard for each qualification and product-release pipeline
 - RC and final release promotion should be one linked GitLab release train, not separate manual islands unless governance requires a manual approval gate.
 - GitHub release publication is a mirrored downstream output, not the authoritative release creation step.
 - Version mutation, artifact generation, chart release, PSR qualification, certification, and bundle publication should be checked-in scripts or templates, not large inline shell bodies.

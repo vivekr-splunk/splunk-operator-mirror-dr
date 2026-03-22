@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -43,3 +44,14 @@ def load_optional_text(path: Path) -> str | None:
     if not path.exists():
         return None
     return path.read_text(encoding="utf-8")
+
+
+def sanitize_pages_component(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9.]+", "-", value.lower()).strip("-.")
+    if len(normalized) > 63:
+        normalized = normalized[:63].rstrip("-.")
+    return normalized or "cycle"
+
+
+def build_pages_cycle_prefix(pipeline_mode: str, pipeline_id: str) -> str:
+    return sanitize_pages_component(f"{pipeline_mode}-{pipeline_id}")

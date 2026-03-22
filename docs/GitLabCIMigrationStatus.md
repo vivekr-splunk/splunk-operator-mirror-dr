@@ -33,9 +33,12 @@
   - `qualification-report-rehearsal`
   - `compatibility-publish-rehearsal`
   - `pages`
+  - `pages-cycle`
   - these jobs create a checked-in release-cycle contract instead of relying only on ad hoc `STAGING_*` flags
-  - `pages` is now the standard live-status publication path for release and qualification cycles:
-    - it publishes a small GitLab Pages dashboard plus raw controller JSON and Markdown
+  - GitLab Pages is now the standard live-status publication path for release and qualification cycles:
+    - `pages` publishes the current dashboard at the project root
+    - `pages-cycle` publishes one preserved dashboard per pipeline under a cycle-specific path
+    - both deployments publish the same controller JSON, Markdown, and rendered HTML summary
     - Confluence is intentionally kept out of the runtime status loop
     - Slack alerts should come from the org-managed `gitlab-slack` service and point people back to GitLab-native status
 - Release and qualification controller documentation now exists in:

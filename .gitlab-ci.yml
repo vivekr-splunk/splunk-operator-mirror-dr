@@ -1527,6 +1527,8 @@ pages:
     - .rules-qualification-or-release-train-or-web-manual
   when: always
   allow_failure: true
+  variables:
+    SOK_PAGES_VARIANT: current
   needs:
     - job: lane-select-rehearsal
       artifacts: true
@@ -1542,6 +1544,42 @@ pages:
     - compatibility-publish-rehearsal
   script:
     - python3 hack/gitlab-ci/status-pages-rehearsal.py
+  pages:
+    publish: public
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - public
+
+pages-cycle:
+  extends:
+    - .notification-family
+    - .python-controller-bootstrap
+    - .rules-qualification-or-release-train-or-web-manual
+  when: always
+  allow_failure: true
+  variables:
+    SOK_PAGES_VARIANT: cycle
+  needs:
+    - job: lane-select-rehearsal
+      artifacts: true
+    - job: qualification-report-rehearsal
+      artifacts: true
+      optional: true
+    - job: compatibility-publish-rehearsal
+      artifacts: true
+      optional: true
+  dependencies:
+    - lane-select-rehearsal
+    - qualification-report-rehearsal
+    - compatibility-publish-rehearsal
+  script:
+    - python3 hack/gitlab-ci/status-pages-rehearsal.py
+  pages:
+    publish: public
+    path_prefix: "$REHEARSAL_PIPELINE_MODE-$CI_PIPELINE_ID"
+    expire_in: never
   artifacts:
     when: always
     expire_in: 30 days
