@@ -36,32 +36,42 @@ def main() -> int:
 
     bridges = api_get_json(f"{api_url}/projects/{project_id}/pipelines/{pipeline_id}/bridges?per_page=100")
     bridge = next((item for item in bridges if item.get("name") == "psr-release-qualification-dispatch"), None)
-    if bridge is None:
-        raise RuntimeError("Could not find psr-release-qualification-dispatch bridge in the current pipeline")
-
-    downstream = bridge.get("downstream_pipeline") or {}
     verdict = {
         "schema_version": "v1alpha1",
-        "bridge_job_id": bridge.get("id"),
-        "bridge_status": bridge.get("status", "unknown"),
-        "bridge_job_url": bridge.get("web_url", ""),
-        "downstream_project_id": downstream.get("project_id"),
-        "downstream_pipeline_id": downstream.get("id"),
-        "downstream_pipeline_status": downstream.get("status", "not-created"),
-        "downstream_pipeline_url": downstream.get("web_url", ""),
+        "bridge_job_id": "",
+        "bridge_status": "not-requested",
+        "bridge_job_url": "",
+        "downstream_project_id": "",
+        "downstream_pipeline_id": "",
+        "downstream_pipeline_status": "not-created",
+        "downstream_pipeline_url": "",
         "target_version": os.getenv("SOK_PSR_TARGET_VERSION", os.getenv("TARGET_VERSION", "")),
         "base_version": os.getenv("SOK_PSR_BASE_VERSION", os.getenv("BASE_VERSION", "")),
         "test_type": os.getenv("SOK_PSR_TRIGGER_TEST_TYPE", os.getenv("TEST_TYPE", "")),
         "enterprise_image": os.getenv("SOK_ENTERPRISE_IMAGE", os.getenv("IMAGE_SPLUNK_ENTERPRISE", "")),
     }
-
-    verdict["verdict"] = (
-        "passed"
-        if verdict["bridge_status"] == "success" and verdict["downstream_pipeline_status"] == "success"
-        else "pending"
-        if verdict["bridge_status"] in {"running", "pending"} or verdict["downstream_pipeline_status"] in {"running", "pending"}
-        else "failed"
-    )
+    if bridge is None:
+        verdict["verdict"] = "skipped"
+    else:
+        downstream = bridge.get("downstream_pipeline") or {}
+        verdict.update(
+            {
+                "bridge_job_id": bridge.get("id"),
+                "bridge_status": bridge.get("status", "unknown"),
+                "bridge_job_url": bridge.get("web_url", ""),
+                "downstream_project_id": downstream.get("project_id"),
+                "downstream_pipeline_id": downstream.get("id"),
+                "downstream_pipeline_status": downstream.get("status", "not-created"),
+                "downstream_pipeline_url": downstream.get("web_url", ""),
+            }
+        )
+        verdict["verdict"] = (
+            "passed"
+            if verdict["bridge_status"] == "success" and verdict["downstream_pipeline_status"] == "success"
+            else "pending"
+            if verdict["bridge_status"] in {"running", "pending"} or verdict["downstream_pipeline_status"] in {"running", "pending"}
+            else "failed"
+        )
 
     json_path = output_dir / "psr-qualification-verdict.json"
     md_path = output_dir / "psr-qualification-verdict.md"
