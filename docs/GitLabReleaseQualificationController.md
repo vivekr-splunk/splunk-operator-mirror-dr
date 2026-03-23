@@ -55,6 +55,8 @@ The status publication slice now turns those controller artifacts into two GitLa
     - `REHEARSAL_PIPELINE_MODE`
     - `CI_PIPELINE_ID`
 
+Both status jobs run in the `administration` stage, not only at the final tail of the pipeline, so GitLab can publish the best available failure or in-progress snapshot even when later tail jobs have not completed.
+
 That split means stakeholders can see both:
 
 - the latest current state

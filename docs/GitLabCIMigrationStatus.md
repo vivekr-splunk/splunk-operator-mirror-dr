@@ -39,6 +39,7 @@
     - `pages` publishes the current dashboard at the project root
     - `pages-cycle` publishes one preserved dashboard per pipeline under a cycle-specific path
     - both deployments publish the same controller JSON, Markdown, and rendered HTML summary
+    - both deployments now run in the `administration` stage so a failure snapshot can publish without waiting for the final notify tail
     - Confluence is intentionally kept out of the runtime status loop
     - Slack alerts should come from the org-managed `gitlab-slack` service and point people back to GitLab-native status
 - Release and qualification controller documentation now exists in:

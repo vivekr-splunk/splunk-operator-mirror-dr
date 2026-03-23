@@ -1525,7 +1525,7 @@ rollback-rehearsal:
 
 pages:
   extends:
-    - .notification-family
+    - .administration-family
     - .python-controller-bootstrap
     - .rules-qualification-or-release-train-or-web-manual
   when: always
@@ -1557,7 +1557,7 @@ pages:
 
 pages-cycle:
   extends:
-    - .notification-family
+    - .administration-family
     - .python-controller-bootstrap
     - .rules-qualification-or-release-train-or-web-manual
   when: always
