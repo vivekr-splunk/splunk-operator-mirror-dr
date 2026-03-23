@@ -170,7 +170,18 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
   - collect downstream PSR pipeline URLs, verdicts, and owner triage
   - make PSR disposition part of the RC-to-GA approval packet
 
-### 6. Chart Publication And Verification
+### 6. FIPS And Architecture Validation
+
+- source:
+  - `splunk-operator-cicd` existing-cluster FIPS release tests
+  - ARM or Graviton release-test families
+- target:
+  - run release smoke and integration validation on the approved existing FIPS cluster without creating or deleting infrastructure
+  - consume the staged RC operator image rather than a commit-scoped staging build
+  - keep Graviton coverage under the ARM release-validation families, since the release requirement is ARM-based Splunk Enterprise compatibility
+  - preserve the runtime logs and JUnit outputs as part of the RC approval packet
+
+### 7. Chart Publication And Verification
 
 - source:
   - `release.yml`
@@ -183,7 +194,7 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
   - run chart publication or certification checks before official publication
   - mirror to the approved official external OCI chart destination only after release approval
 
-### 7. Bundle And Catalog Publication
+### 8. Bundle And Catalog Publication
 
 - source:
   - `bundle-push-post-release.yml`
@@ -192,7 +203,7 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
   - push them to staging bundle/catalog destinations first
   - validate pull/install metadata before public publication
 
-### 8. Preflight Certification Gates
+### 9. Preflight Certification Gates
 
 - source:
   - `openshift-preflight`
@@ -202,7 +213,7 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
   - use a partner-accessible OCI registry plus Docker auth for certification inputs; do not assume world-public images are required
   - preserve full preflight evidence as a release gate before ecosystem submission
 
-### 9. Ecosystem Submission
+### 10. Ecosystem Submission
 
 - source:
   - `community-operators`

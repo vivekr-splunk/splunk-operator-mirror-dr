@@ -1208,6 +1208,78 @@ release-image-stage-rehearsal:
       3. Record the staged image refs and digests for certification and downstream release jobs.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/release-image-stage-rehearsal.sh
 
+fips-smoke-release-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .needs-release-controller
+    - .rules-release-train-or-web-manual
+  needs:
+    - job: release-image-stage-rehearsal
+      artifacts: true
+    - job: lane-select-rehearsal
+      artifacts: true
+  variables:
+    WORKFLOW_SLUG: fips-smoke-release-workflow
+    WORKFLOW_NAME: FIPS Smoke Release Workflow
+    SOURCE_WORKFLOW_FILE: splunk-operator-cicd existing-cluster smoke release path
+    WORKFLOW_CLASS: release-fips-smoke
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_FIPS_RELEASE
+    REQUIRED_VARS: STAGING_FIPS_EKS_CLUSTER_NAME,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    BUILD_IMAGE_REF_FILE: rehearsal/release-image-stage-workflow-output/standard-image-alias-ref.txt
+    JOB_INT_TEST_PROFILE: smoke
+    JOB_USE_EXISTING_CLUSTER: true
+    JOB_EXISTING_CLUSTER_NAME: $STAGING_FIPS_EKS_CLUSTER_NAME
+    WORKFLOW_NOTES: This release-only workflow mirrors the existing-cluster FIPS validation contract from splunk-operator-cicd. It runs smoke coverage against the approved FIPS EKS cluster using the staged RC operator image.
+    WORKFLOW_PLAN: |
+      1. Consume the staged RC operator image from the internal release repository.
+      2. Connect to the approved existing FIPS EKS cluster without creating or deleting infrastructure.
+      3. Run smoke coverage only and preserve runtime logs as release evidence.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/fips-smoke-release-workflow-inttest-junit.xml
+
+fips-int-test-release-rehearsal:
+  extends:
+    - .workflow-rehearsal-template
+    - .release-family
+    - .needs-release-controller
+    - .rules-release-train-or-web-manual
+  needs:
+    - job: release-image-stage-rehearsal
+      artifacts: true
+    - job: lane-select-rehearsal
+      artifacts: true
+  variables:
+    WORKFLOW_SLUG: fips-int-test-release-workflow
+    WORKFLOW_NAME: FIPS Integration Release Workflow
+    SOURCE_WORKFLOW_FILE: splunk-operator-cicd existing-cluster integration release path
+    WORKFLOW_CLASS: release-fips-integration
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_FIPS_RELEASE
+    REQUIRED_VARS: STAGING_FIPS_EKS_CLUSTER_NAME,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
+    BUILD_IMAGE_REF_FILE: rehearsal/release-image-stage-workflow-output/standard-image-alias-ref.txt
+    JOB_INT_TEST_PROFILE: managersecret
+    JOB_USE_EXISTING_CLUSTER: true
+    JOB_EXISTING_CLUSTER_NAME: $STAGING_FIPS_EKS_CLUSTER_NAME
+    WORKFLOW_NOTES: This release-only workflow mirrors the existing-cluster FIPS integration contract from splunk-operator-cicd. It runs integration coverage on the approved FIPS EKS cluster using the staged RC operator image.
+    WORKFLOW_PLAN: |
+      1. Consume the staged RC operator image from the internal release repository.
+      2. Connect to the approved existing FIPS EKS cluster without creating or deleting infrastructure.
+      3. Run integration coverage and preserve runtime logs as release evidence.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/
+    reports:
+      junit: rehearsal/fips-int-test-release-workflow-inttest-junit.xml
+
 psr-release-qualification-rehearsal:
   extends:
     - .workflow-rehearsal-template

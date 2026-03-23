@@ -64,6 +64,11 @@ safe_test_focus="$(sanitize_slug "${test_focus}")"
 cluster_name_prefix="${JOB_EKS_CLUSTER_NAME_PREFIX:-${STAGING_EKS_CLUSTER_NAME_PREFIX:-eks-integration-test-cluster}}"
 cluster_nodes="${STAGING_INT_CLUSTER_NODES:-${JOB_INT_CLUSTER_NODES:-${RESOLVED_INT_CLUSTER_NODES_DEFAULT}}}"
 cluster_workers="${STAGING_INT_CLUSTER_WORKERS:-${JOB_INT_CLUSTER_WORKERS:-${RESOLVED_INT_CLUSTER_WORKERS_DEFAULT}}}"
+use_existing_cluster="false"
+if bool_is_true "${STAGING_INT_USE_EXISTING_CLUSTER:-${JOB_USE_EXISTING_CLUSTER:-false}}"; then
+  use_existing_cluster="true"
+fi
+existing_cluster_name="${STAGING_INT_EXISTING_CLUSTER_NAME:-${JOB_EXISTING_CLUSTER_NAME:-}}"
 
 export AWS_DEFAULT_REGION="${RESOLVED_ECR_REGION}"
 export AWS_REGION="${RESOLVED_ECR_REGION}"
@@ -78,7 +83,15 @@ export COMMIT_HASH="${NORMALIZED_TESTENV_COMMIT_HASH}"
 export TEST_FOCUS="${test_focus}"
 export TEST_TO_SKIP="${STAGING_INT_TEST_TO_SKIP:-${JOB_INT_TEST_TO_SKIP:-${RESOLVED_INT_TEST_TO_SKIP_DEFAULT:-${integration_skip_regex}}}}"
 export TEST_CLUSTER_PLATFORM="eks"
-export TEST_CLUSTER_NAME="${cluster_name_prefix}-${safe_test_focus}-${CI_JOB_ID}"
+if [ "${use_existing_cluster}" = "true" ]; then
+  if [ -z "${existing_cluster_name}" ]; then
+    echo "Existing-cluster mode requires STAGING_INT_EXISTING_CLUSTER_NAME or JOB_EXISTING_CLUSTER_NAME" >&2
+    exit 1
+  fi
+  export TEST_CLUSTER_NAME="${existing_cluster_name}"
+else
+  export TEST_CLUSTER_NAME="${cluster_name_prefix}-${safe_test_focus}-${CI_JOB_ID}"
+fi
 export CLUSTER_WIDE="${STAGING_INT_CLUSTER_WIDE:-${JOB_INT_CLUSTER_WIDE:-true}}"
 export DEPLOYMENT_TYPE="${STAGING_INT_DEPLOYMENT_TYPE:-${JOB_INT_DEPLOYMENT_TYPE:-}}"
 export CLUSTER_NODES="${cluster_nodes}"
@@ -99,6 +112,7 @@ append_context "${context_file}" "test_profile" "${RESOLVED_INT_TEST_PROFILE}"
 append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
 append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
 append_context "${context_file}" "cluster_name" "${TEST_CLUSTER_NAME}"
+append_context "${context_file}" "existing_cluster" "${use_existing_cluster}"
 append_context "${context_file}" "cluster_workers" "${CLUSTER_WORKERS}"
 append_context "${context_file}" "cluster_nodes" "${CLUSTER_NODES}"
 append_context "${context_file}" "cluster_wide" "${CLUSTER_WIDE}"
@@ -132,8 +146,12 @@ cleanup_and_exit() {
   make cleanup >> "${cleanup_log}" 2>&1 || cleanup_rc=1
   log_step "cleanup:make-clean" | tee -a "${cleanup_log}" >/dev/null
   make clean >> "${cleanup_log}" 2>&1 || cleanup_rc=1
-  log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
-  make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
+  if [ "${use_existing_cluster}" = "true" ]; then
+    log_step "cleanup:cluster-down:skipped-existing-cluster" | tee -a "${cleanup_log}" >/dev/null
+  else
+    log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
+    make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
+  fi
   log_step "cleanup:complete cleanup_rc=${cleanup_rc}" | tee -a "${cleanup_log}" >/dev/null
 
   rm -f "${aws_oidc_token_file}"
@@ -177,21 +195,31 @@ fi
 aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 log_step "registry:ecr-login:complete"
 
-log_step "cluster:up ${TEST_CLUSTER_NAME}"
-make cluster-up 2>&1 | tee -a "${cluster_log}"
-log_step "cluster:up:complete"
+if [ "${use_existing_cluster}" = "true" ]; then
+  log_step "cluster:use-existing ${TEST_CLUSTER_NAME}"
+  aws eks update-kubeconfig --name "${TEST_CLUSTER_NAME}" --region "${AWS_DEFAULT_REGION}" 2>&1 | tee -a "${cluster_log}"
+  log_step "cluster:use-existing:complete"
+else
+  log_step "cluster:up ${TEST_CLUSTER_NAME}"
+  make cluster-up 2>&1 | tee -a "${cluster_log}"
+  log_step "cluster:up:complete"
+fi
 log_step "cluster:snapshot:nodes"
 kubectl get nodes -o wide 2>&1 | tee -a "${cluster_log}"
 log_step "cluster:snapshot:pods"
 kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
 
-log_step "cluster:addons:metrics-server"
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml 2>&1 | tee -a "${cluster_log}"
-log_step "cluster:addons:metrics-server:complete"
+if [ "${use_existing_cluster}" = "true" ]; then
+  log_step "cluster:addons:skipped-existing-cluster"
+else
+  log_step "cluster:addons:metrics-server"
+  kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml 2>&1 | tee -a "${cluster_log}"
+  log_step "cluster:addons:metrics-server:complete"
 
-log_step "cluster:addons:dashboard"
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml 2>&1 | tee -a "${cluster_log}"
-log_step "cluster:addons:dashboard:complete"
+  log_step "cluster:addons:dashboard"
+  kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.5/aio/deploy/recommended.yaml 2>&1 | tee -a "${cluster_log}"
+  log_step "cluster:addons:dashboard:complete"
+fi
 
 log_step "tests:int-test:start focus=${TEST_FOCUS}"
 make int-test

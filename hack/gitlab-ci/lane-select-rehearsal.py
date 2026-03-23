@@ -20,6 +20,8 @@ def main() -> int:
             "pre-release-workflow-rehearsal",
             "automated-release-workflow-rehearsal",
             "release-image-stage-rehearsal",
+            "fips-smoke-release-rehearsal",
+            "fips-int-test-release-rehearsal",
             "psr-release-qualification-rehearsal",
             "psr-release-qualification-dispatch",
             "psr-release-qualification-collect",
