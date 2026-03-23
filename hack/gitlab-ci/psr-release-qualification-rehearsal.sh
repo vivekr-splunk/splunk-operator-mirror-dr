@@ -95,9 +95,9 @@ EOF
 
 - PSR is a release gate for RC promotion, not a post-GA afterthought.
 - The GitLab release lane should collect PSR pipeline URLs and verdicts into the qualification report before RC-to-GA approval.
-- Downstream PSR dispatch must be manual and one test type at a time.
-- `TEST_TYPE=all` must not be triggered from the SOK release lane.
-- Re-run only after the previous PSR resources are confirmed cleaned up.
+- Downstream PSR dispatch is temporarily disabled from the SOK release lane.
+- This stage records the exact single-test-type trigger inputs for later use when the PSR team reopens capacity.
+- `TEST_TYPE=all` must not be triggered from the SOK release lane when execution is re-enabled.
 - Performance regressions require explicit owner triage and disposition before public publication.
 EOF
 } > "${matrix_file}"
