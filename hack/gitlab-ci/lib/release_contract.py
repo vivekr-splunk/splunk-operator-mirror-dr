@@ -292,7 +292,7 @@ def build_release_context(project_dir: Path, output_dir: Path) -> ReleaseContext
     )
     psr_trigger_test_type = first_non_empty(
         env.get("STAGING_PSR_TRIGGER_TEST_TYPE"),
-        default="all",
+        default="",
     )
     manifest = {
         "schema_version": "v1alpha1",

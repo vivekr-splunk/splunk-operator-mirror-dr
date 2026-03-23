@@ -1221,10 +1221,10 @@ psr-release-qualification-rehearsal:
     WORKFLOW_CLASS: release-qualification-psr
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_PSR_RELEASE
     REQUIRED_VARS: STAGING_PSR_BASE_VERSION
-    WORKFLOW_NOTES: PSR is the long-running release-quality gate for upgrade, app-framework, and performance coverage. The GitLab release lane should gather the exact PSR trigger matrix before RC-to-GA approval.
+    WORKFLOW_NOTES: PSR is the long-running release-quality gate for upgrade, app-framework, and performance coverage. The GitLab release lane should gather the exact PSR trigger matrix before RC-to-GA approval, but downstream PSR execution must be manually released one test type at a time.
     WORKFLOW_PLAN: |
       1. Prepare the PSR trigger matrix for upgrade, app-framework, and performance scenarios.
-      2. Run the matrix against the release candidate version and target Splunk enterprise image.
+      2. Dispatch only a single approved PSR test type at a time after confirming previous clusters are cleaned up.
       3. Collect PSR pipeline URLs and verdicts into the release qualification report before GA promotion.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/psr-release-qualification-rehearsal.sh
 
@@ -1238,8 +1238,14 @@ psr-release-qualification-dispatch:
   rules:
     - if: '$STAGING_EXECUTE_PSR_RELEASE != "true"'
       when: never
+    - if: '$SOK_PSR_TRIGGER_TEST_TYPE == ""'
+      when: never
+    - if: '$SOK_PSR_TRIGGER_TEST_TYPE == "all"'
+      when: never
     - if: '$REHEARSAL_PIPELINE_MODE == "release_train"'
+      when: manual
     - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
   variables:
     TEST_TYPE: $SOK_PSR_TRIGGER_TEST_TYPE
     BASE_VERSION: $SOK_PSR_BASE_VERSION
