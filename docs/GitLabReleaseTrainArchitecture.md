@@ -158,6 +158,7 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
   - sign and verify release images
   - generate release manifests
   - create the canonical GitLab release object
+  - back the release asset links with stable GitLab Release download URLs that resolve to Generic Package Registry content rather than ephemeral job-artifact URLs
   - keep official public publication downstream of GitLab release success
 
 ### 5. PSR Release Qualification
@@ -177,7 +178,7 @@ SOK should therefore qualify early, based on image readiness, instead of waiting
   - package charts in GitLab
   - publish both charts to an internal OCI chart repository first, using sibling OCI refs rather than a GitHub Pages index as the primary distribution model
   - validate installability and publication metadata by pulling the published OCI charts and rendering them locally
-  - preserve the packaged chart archives as compatibility assets on the GitLab release object
+  - preserve the packaged chart archives as compatibility assets on the GitLab release object through stable GitLab Release download URLs backed by the Generic Package Registry
   - generate a legacy index only when a compatibility consumer such as the legacy chart-releaser path or Artifact Hub metadata still requires it
   - run chart publication or certification checks before official publication
   - mirror to the approved official external OCI chart destination only after release approval

@@ -45,6 +45,10 @@ The controller emits artifacts under `rehearsal/release-controller/`:
 - `blocker-summary.json`
 - `compatibility-publish-plan.json`
 - `compatibility-publish-plan.md`
+- `gitlab-release-record-plan.json`
+- `gitlab-release-record-plan.md`
+- `gitlab-release-record-result.json`
+- `gitlab-release-record-result.md`
 
 The status publication slice now turns those controller artifacts into two GitLab-native views:
 

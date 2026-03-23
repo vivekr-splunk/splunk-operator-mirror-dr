@@ -1541,10 +1541,14 @@ pages:
     - job: compatibility-publish-rehearsal
       artifacts: true
       optional: true
+    - job: gitlab-release-record-rehearsal
+      artifacts: true
+      optional: true
   dependencies:
     - lane-select-rehearsal
     - qualification-report-rehearsal
     - compatibility-publish-rehearsal
+    - gitlab-release-record-rehearsal
   script:
     - python3 hack/gitlab-ci/status-pages-rehearsal.py
   pages:
@@ -1573,10 +1577,14 @@ pages-cycle:
     - job: compatibility-publish-rehearsal
       artifacts: true
       optional: true
+    - job: gitlab-release-record-rehearsal
+      artifacts: true
+      optional: true
   dependencies:
     - lane-select-rehearsal
     - qualification-report-rehearsal
     - compatibility-publish-rehearsal
+    - gitlab-release-record-rehearsal
   script:
     - python3 hack/gitlab-ci/status-pages-rehearsal.py
   pages:
@@ -1685,6 +1693,55 @@ compatibility-publish-rehearsal:
     - qualification-report-rehearsal
   script:
     - python3 hack/gitlab-ci/compatibility-publish-rehearsal.py
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - rehearsal/release-controller/
+
+gitlab-release-record-rehearsal:
+  extends:
+    - .administration-family
+    - .required-rehearsal
+    - .python-controller-bootstrap
+    - .rules-release-train-or-web-manual
+  needs:
+    - job: lane-select-rehearsal
+      artifacts: true
+    - job: compatibility-publish-rehearsal
+      artifacts: true
+      optional: true
+    - job: pre-release-workflow-rehearsal
+      artifacts: true
+      optional: true
+    - job: automated-release-workflow-rehearsal
+      artifacts: true
+      optional: true
+    - job: release-charts-workflow-rehearsal
+      artifacts: true
+      optional: true
+  dependencies:
+    - lane-select-rehearsal
+    - compatibility-publish-rehearsal
+    - pre-release-workflow-rehearsal
+    - automated-release-workflow-rehearsal
+    - release-charts-workflow-rehearsal
+  variables:
+    WORKFLOW_SLUG: gitlab-release-record
+    WORKFLOW_NAME: GitLab Release Record Rehearsal
+    SOURCE_WORKFLOW_FILE: gitlab-release
+    WORKFLOW_CLASS: gitlab-release-record
+    EXECUTE_FLAG_NAME: STAGING_EXECUTE_GITLAB_RELEASE_RECORD
+    REQUIRED_VARS: ""
+    WORKFLOW_NOTES: The steady-state product-release lane should use GitLab Releases as the canonical shipped record. Stable compatibility assets should come from the Generic Package Registry, not ephemeral job-artifact links.
+    WORKFLOW_PLAN: |
+      1. Build a GitLab release record plan from the checked-in controller outputs and release artifacts.
+      2. Upload stable release files to the Generic Package Registry when release-record execution is enabled.
+      3. Create or update the GitLab Release record and attach package-backed asset links.
+      4. Preserve the release record plan and result under rehearsal/release-controller for Pages and auditability.
+    EXECUTION_SCRIPT_FILE: hack/gitlab-ci/gitlab-release-record-rehearsal.py
+  script:
+    - python3 hack/gitlab-ci/gitlab-release-record-rehearsal.py
   artifacts:
     when: always
     expire_in: 30 days

@@ -22,6 +22,10 @@ RAW_FILES = [
     "compatibility-decision.json",
     "compatibility-publish-plan.json",
     "compatibility-publish-plan.md",
+    "gitlab-release-record-plan.json",
+    "gitlab-release-record-plan.md",
+    "gitlab-release-record-result.json",
+    "gitlab-release-record-result.md",
     "chart-publication-record.json",
     "chart-publication-record.md",
     "blocker-summary.json",
@@ -67,6 +71,8 @@ def build_summary(rehearsal_dir: Path, controller_dir: Path) -> dict[str, object
     lane_selection = json.loads((controller_dir / "lane-selection.json").read_text(encoding="utf-8"))
     compatibility = load_optional_json(controller_dir / "compatibility-record.json")
     publish_plan = load_optional_json(controller_dir / "compatibility-publish-plan.json")
+    release_record_plan = load_optional_json(controller_dir / "gitlab-release-record-plan.json")
+    release_record_result = load_optional_json(controller_dir / "gitlab-release-record-result.json")
     chart_publication = load_optional_json(controller_dir / "chart-publication-record.json")
     blocker_summary = load_optional_json(controller_dir / "blocker-summary.json")
     psr_verdict = load_optional_json(controller_dir / "psr-qualification-verdict.json")
@@ -123,6 +129,8 @@ def build_summary(rehearsal_dir: Path, controller_dir: Path) -> dict[str, object
         },
         "blockers": blocker_summary if isinstance(blocker_summary, dict) else None,
         "chart_publication": chart_publication if isinstance(chart_publication, dict) else None,
+        "gitlab_release_record_plan": release_record_plan if isinstance(release_record_plan, dict) else None,
+        "gitlab_release_record_result": release_record_result if isinstance(release_record_result, dict) else None,
         "psr_verdict": psr_verdict if isinstance(psr_verdict, dict) else None,
         "raw_files": [],
         "qualification_report_excerpt": (
@@ -202,6 +210,7 @@ def render_markdown(summary: dict[str, object]) -> str:
     blocker_counts = blockers.get("bucket_counts", {}) if isinstance(blockers, dict) else {}
     chart_publication = summary.get("chart_publication") or {}
     compatibility_assets = chart_publication.get("compatibility_assets", []) if isinstance(chart_publication, dict) else []
+    release_record_result = summary.get("gitlab_release_record_result") or {}
     psr_verdict = summary.get("psr_verdict") or {}
 
     lines = [
@@ -227,6 +236,11 @@ def render_markdown(summary: dict[str, object]) -> str:
         f"- internal chart target: `{chart_publication.get('internal_chart_target', 'unset')}`",
         f"- official chart target: `{chart_publication.get('official_chart_target', 'unset')}`",
         f"- compatibility assets: `{len(compatibility_assets)}`",
+        "",
+        "## GitLab Release",
+        "",
+        f"- execution status: `{release_record_result.get('execution_status', 'pending')}`",
+        f"- release url: {release_record_result.get('release_url', 'pending')}",
         "",
         "## Pages",
         "",
@@ -263,6 +277,7 @@ def write_html(path: Path, summary: dict[str, object]) -> None:
     blocker_counts = blockers.get("bucket_counts", {}) if isinstance(blockers, dict) else {}
     chart_publication = summary.get("chart_publication") or {}
     compatibility_assets = chart_publication.get("compatibility_assets", []) if isinstance(chart_publication, dict) else []
+    release_record_result = summary.get("gitlab_release_record_result") or {}
     psr_verdict = summary.get("psr_verdict") or {}
     raw_files = summary["raw_files"]
     evidence = summary.get("evidence", {})
@@ -288,6 +303,11 @@ def write_html(path: Path, summary: dict[str, object]) -> None:
         )
         for asset in compatibility_assets
     ) or "<li>none</li>"
+    release_record_link = (
+        f'<a href="{html.escape(str(release_record_result.get("release_url")))}">{html.escape(str(release_record_result.get("release_url")))}</a>'
+        if release_record_result.get("release_url")
+        else "pending"
+    )
     current_dashboard_link = (
         f'<a href="{html.escape(str(pages.get("current_url")))}">{html.escape(str(pages.get("current_url")))}</a>'
         if pages.get("current_url")
@@ -407,6 +427,14 @@ def write_html(path: Path, summary: dict[str, object]) -> None:
     </ul>
     <ul>
       {compatibility_assets_markup}
+    </ul>
+  </section>
+
+  <section>
+    <h2>GitLab Release Record</h2>
+    <ul>
+      <li>Execution status: <code>{html.escape(str(release_record_result.get('execution_status', 'pending')))}</code></li>
+      <li>Release URL: {release_record_link}</li>
     </ul>
   </section>
 

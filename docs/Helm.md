@@ -7,7 +7,7 @@ The supported Helm distribution model for Splunk Operator is OCI-first.
 - the release pipeline packages and validates OCI charts
 - release candidates publish to an internal OCI chart repository first
 - approved GA releases publish to the official external OCI chart destination recorded in the release notes
-- the packaged `.tgz` charts are preserved as compatibility assets on the GitLab release record
+- the packaged `.tgz` charts are preserved as compatibility assets on the GitLab release record through stable GitLab Release download URLs backed by the Generic Package Registry
 - the GitHub Pages Helm repo is compatibility-only for older consumers and should not be used for new automation
 
 Use the chart base published for your release. For GA that is the official external OCI chart base. For rehearsal and RC validation that is the internal staging OCI chart base.
@@ -34,7 +34,7 @@ printf '%s' "${SPLUNK_HELM_OCI_PASSWORD}" | \
   --password-stdin
 ```
 
-For older consumers that cannot use OCI directly, use the packaged chart archives attached to the GitLab release record for that version. Treat those `.tgz` files as compatibility assets, not the canonical publication surface.
+For older consumers that cannot use OCI directly, use the packaged chart archives linked from the GitLab release record for that version. Those compatibility links should point at stable GitLab Release download URLs backed by the Generic Package Registry, not ephemeral job artifacts.
 
 ## CRDs
 
