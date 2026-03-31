@@ -32,6 +32,37 @@ wait_for_enterprise_crds() {
   done
 }
 
+ensure_private_registry_pull_secret() {
+  if [ -z "${PRIVATE_REGISTRY_SERVER:-}" ] || [ -z "${PRIVATE_REGISTRY_USERNAME:-}" ] || [ -z "${PRIVATE_REGISTRY_PASSWORD:-}" ]; then
+    PRIVATE_REGISTRY_HELM_FLAG=""
+    return 0
+  fi
+
+  PRIVATE_REGISTRY_SECRET_NAME="${PRIVATE_REGISTRY_SECRET_NAME:-private-registry-credentials}"
+  PRIVATE_REGISTRY_HELM_FLAG="--set splunkOperator.imagePullSecrets[0].name=${PRIVATE_REGISTRY_SECRET_NAME}"
+  kubectl get namespace splunk-operator >/dev/null 2>&1 || kubectl create namespace splunk-operator >/dev/null
+  kubectl -n splunk-operator create secret docker-registry "${PRIVATE_REGISTRY_SECRET_NAME}" \
+    --docker-server="${PRIVATE_REGISTRY_SERVER}" \
+    --docker-username="${PRIVATE_REGISTRY_USERNAME}" \
+    --docker-password="${PRIVATE_REGISTRY_PASSWORD}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+}
+
+patch_operator_registry_access() {
+  if [ -z "${PRIVATE_REGISTRY_SERVER:-}" ] || [ -z "${PRIVATE_REGISTRY_USERNAME:-}" ] || [ -z "${PRIVATE_REGISTRY_PASSWORD:-}" ]; then
+    return 0
+  fi
+
+  PRIVATE_REGISTRY_SECRET_NAME="${PRIVATE_REGISTRY_SECRET_NAME:-private-registry-credentials}"
+  kubectl patch serviceaccount controller-manager -n splunk-operator --type=merge \
+    -p "{\"imagePullSecrets\":[{\"name\":\"${PRIVATE_REGISTRY_SECRET_NAME}\"}]}"
+  kubectl patch deployment splunk-operator-controller-manager -n splunk-operator --type=merge \
+    -p "{\"spec\":{\"template\":{\"spec\":{\"imagePullSecrets\":[{\"name\":\"${PRIVATE_REGISTRY_SECRET_NAME}\"}]}}}}"
+  kubectl rollout restart deployment splunk-operator-controller-manager -n splunk-operator >/dev/null 2>&1 || true
+}
+
+ensure_private_registry_pull_secret
+
 if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then
   echo "Installing Splunk Operator using Helm charts"
   helm uninstall splunk-operator -n splunk-operator
@@ -41,9 +72,9 @@ if [  "${DEPLOYMENT_TYPE}" == "helm" ]; then
   make uninstall
   make install
   if [ "${CLUSTER_WIDE}" != "true" ]; then
-    helm install splunk-operator --create-namespace --namespace splunk-operator --set splunkOperator.clusterWideAccess=false --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} --set splunkOperator.splunkGeneralTerms="--accept-sgt-current-at-splunk-com" helm-chart/splunk-operator
+    helm install splunk-operator --create-namespace --namespace splunk-operator --set splunkOperator.clusterWideAccess=false --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} --set splunkOperator.splunkGeneralTerms="--accept-sgt-current-at-splunk-com" ${PRIVATE_REGISTRY_HELM_FLAG:-} helm-chart/splunk-operator
   else
-    helm install splunk-operator --create-namespace --namespace splunk-operator --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} --set splunkOperator.splunkGeneralTerms="--accept-sgt-current-at-splunk-com" helm-chart/splunk-operator
+    helm install splunk-operator --create-namespace --namespace splunk-operator --set splunkOperator.image.repository=${PRIVATE_SPLUNK_OPERATOR_IMAGE} --set image.repository=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} --set splunkOperator.splunkGeneralTerms="--accept-sgt-current-at-splunk-com" ${PRIVATE_REGISTRY_HELM_FLAG:-} helm-chart/splunk-operator
   fi
 elif [  "${CLUSTER_WIDE}" != "true" ]; then
   # Install the CRDs
@@ -59,6 +90,7 @@ else
   make install
   wait_for_enterprise_crds
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com" WATCH_NAMESPACE="" ENVIRONMENT=debug
+  patch_operator_registry_access
 fi
 
 if [ $? -ne 0 ]; then

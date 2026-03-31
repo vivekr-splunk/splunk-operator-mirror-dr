@@ -272,6 +272,35 @@ func (testenv *TestCaseEnv) createNamespace() error {
 		return err
 	}
 
+	if _, err := ensurePrivateRegistryPullSecret(context.TODO(), testenv.GetKubeClient(), testenv.namespace); err != nil {
+		testenv.Log.Error(err, "Unable to create private registry pull secret", "Namespace", testenv.namespace)
+		return err
+	}
+
+	secretRefs := privateRegistryPullSecretRefs()
+	if len(secretRefs) > 0 {
+		if err := wait.PollImmediate(PollInterval, DefaultTimeout, func() (bool, error) {
+			key := client.ObjectKey{Name: "default", Namespace: testenv.namespace}
+			sa := &corev1.ServiceAccount{}
+			err := testenv.GetKubeClient().Get(context.TODO(), key, sa)
+			if err != nil {
+				if errors.IsNotFound(err) {
+					return false, nil
+				}
+				return false, err
+			}
+
+			sa.ImagePullSecrets = secretRefs
+			if updateErr := testenv.GetKubeClient().Update(context.TODO(), sa); updateErr != nil {
+				return false, updateErr
+			}
+			return true, nil
+		}); err != nil {
+			testenv.Log.Error(err, "Unable to configure default service account for private registry pulls", "Namespace", testenv.namespace)
+			return err
+		}
+	}
+
 	return nil
 }
 

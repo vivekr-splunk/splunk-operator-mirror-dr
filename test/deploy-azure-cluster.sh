@@ -28,8 +28,12 @@ function createCluster() {
     return 1
   fi
 
-  # Attach Container Registry to AKS Cluster
-  rc=$(az aks update --resource-group ${AZURE_RESOURCE_GROUP} --name ${TEST_CLUSTER_NAME} --attach-acr ${AZURE_CONTAINER_REGISTRY})
+  # Prefer imagePullSecrets when explicit registry credentials are available.
+  if [[ -n "${PRIVATE_REGISTRY_SERVER}" && -n "${PRIVATE_REGISTRY_USERNAME}" && -n "${PRIVATE_REGISTRY_PASSWORD}" ]] ;then
+    echo "Skipping AKS ACR attach; Kubernetes imagePullSecrets will provide registry access"
+  else
+    rc=$(az aks update --resource-group ${AZURE_RESOURCE_GROUP} --name ${TEST_CLUSTER_NAME} --attach-acr ${AZURE_CONTAINER_REGISTRY})
+  fi
   rc=$(az aks get-credentials --resource-group ${AZURE_RESOURCE_GROUP} --name ${TEST_CLUSTER_NAME} --overwrite-existing)
 
   # List created nodes

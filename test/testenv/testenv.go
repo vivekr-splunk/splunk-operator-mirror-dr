@@ -336,6 +336,7 @@ func newServiceAccount(ns string, serviceAccountName string) *corev1.ServiceAcco
 			Name:      serviceAccountName,
 			Namespace: ns,
 		},
+		ImagePullSecrets: privateRegistryPullSecretRefs(),
 	}
 
 	return &new
