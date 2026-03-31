@@ -32,6 +32,55 @@ effective_private_registry_auth_mode() {
   printf '%s\n' "node"
 }
 
+assert_operator_registry_access_mode() {
+  OPERATOR_DEPLOYMENT_NAME="$(kubectl get deployment -n splunk-operator -l control-plane=controller-manager -o jsonpath='{.items[0].metadata.name}')"
+  if [ -z "${OPERATOR_DEPLOYMENT_NAME}" ]; then
+    echo "Unable to locate operator deployment in splunk-operator namespace"
+    return 1
+  fi
+
+  OPERATOR_SERVICE_ACCOUNT_NAME="$(kubectl get deployment "${OPERATOR_DEPLOYMENT_NAME}" -n splunk-operator -o jsonpath='{.spec.template.spec.serviceAccountName}')"
+  if [ -z "${OPERATOR_SERVICE_ACCOUNT_NAME}" ]; then
+    OPERATOR_SERVICE_ACCOUNT_NAME="default"
+  fi
+
+  EFFECTIVE_REGISTRY_AUTH_MODE="$(effective_private_registry_auth_mode)"
+  DEPLOYMENT_PULL_SECRETS="$(kubectl get deployment "${OPERATOR_DEPLOYMENT_NAME}" -n splunk-operator -o jsonpath='{.spec.template.spec.imagePullSecrets[*].name}')"
+  SERVICE_ACCOUNT_PULL_SECRETS="$(kubectl get serviceaccount "${OPERATOR_SERVICE_ACCOUNT_NAME}" -n splunk-operator -o jsonpath='{.imagePullSecrets[*].name}')"
+
+  echo "Operator registry access mode: ${EFFECTIVE_REGISTRY_AUTH_MODE}"
+  echo "Operator deployment image pull secrets: ${DEPLOYMENT_PULL_SECRETS:-<none>}"
+  echo "Operator service account image pull secrets: ${SERVICE_ACCOUNT_PULL_SECRETS:-<none>}"
+
+  case "${EFFECTIVE_REGISTRY_AUTH_MODE}" in
+    node)
+      if [ -n "${DEPLOYMENT_PULL_SECRETS}" ] || [ -n "${SERVICE_ACCOUNT_PULL_SECRETS}" ]; then
+        echo "Node registry auth mode must not use Kubernetes imagePullSecrets"
+        return 1
+      fi
+      ;;
+    secret)
+      if [ -z "${PRIVATE_REGISTRY_SECRET_NAME:-}" ]; then
+        PRIVATE_REGISTRY_SECRET_NAME="${PRIVATE_REGISTRY_SECRET_NAME:-private-registry-credentials}"
+      fi
+      case " ${DEPLOYMENT_PULL_SECRETS} " in
+        *" ${PRIVATE_REGISTRY_SECRET_NAME} "*) ;;
+        *)
+          echo "Operator deployment does not reference the expected image pull secret ${PRIVATE_REGISTRY_SECRET_NAME}"
+          return 1
+          ;;
+      esac
+      case " ${SERVICE_ACCOUNT_PULL_SECRETS} " in
+        *" ${PRIVATE_REGISTRY_SECRET_NAME} "*) ;;
+        *)
+          echo "Operator service account does not reference the expected image pull secret ${PRIVATE_REGISTRY_SECRET_NAME}"
+          return 1
+          ;;
+      esac
+      ;;
+  esac
+}
+
 wait_for_enterprise_crds() {
   for crd in \
     clustermanagers.enterprise.splunk.com \
@@ -97,15 +146,7 @@ patch_operator_registry_access() {
   kubectl patch deployment "${OPERATOR_DEPLOYMENT_NAME}" -n splunk-operator --type=merge \
     -p "{\"spec\":{\"template\":{\"spec\":{\"imagePullSecrets\":[{\"name\":\"${PRIVATE_REGISTRY_SECRET_NAME}\"}]}}}}" >/dev/null
 
-  IMAGE_PULL_SECRETS="$(kubectl get deployment "${OPERATOR_DEPLOYMENT_NAME}" -n splunk-operator -o jsonpath='{.spec.template.spec.imagePullSecrets[*].name}')"
-  echo "Operator deployment image pull secrets: ${IMAGE_PULL_SECRETS:-<none>}"
-  case " ${IMAGE_PULL_SECRETS} " in
-    *" ${PRIVATE_REGISTRY_SECRET_NAME} "*) ;;
-    *)
-      echo "Operator deployment does not reference the expected image pull secret ${PRIVATE_REGISTRY_SECRET_NAME}"
-      return 1
-      ;;
-  esac
+  assert_operator_registry_access_mode
 
   kubectl rollout restart deployment "${OPERATOR_DEPLOYMENT_NAME}" -n splunk-operator >/dev/null
 }
@@ -140,6 +181,7 @@ else
   wait_for_enterprise_crds
   make deploy IMG=${PRIVATE_SPLUNK_OPERATOR_IMAGE} SPLUNK_ENTERPRISE_IMAGE=${PRIVATE_SPLUNK_ENTERPRISE_IMAGE} SPLUNK_GENERAL_TERMS="--accept-sgt-current-at-splunk-com" WATCH_NAMESPACE="" ENVIRONMENT=debug
   patch_operator_registry_access
+  assert_operator_registry_access_mode
 fi
 
 if [ $? -ne 0 ]; then

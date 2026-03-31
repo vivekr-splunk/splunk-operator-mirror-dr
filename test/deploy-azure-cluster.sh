@@ -11,12 +11,12 @@ recordRegistryAuthMode() {
 }
 
 requestedRegistryAuthMode() {
-  case "${PRIVATE_REGISTRY_AUTH_MODE:-auto}" in
+  case "${PRIVATE_REGISTRY_AUTH_MODE:-node}" in
     node|secret|auto)
-      printf '%s\n' "${PRIVATE_REGISTRY_AUTH_MODE:-auto}"
+      printf '%s\n' "${PRIVATE_REGISTRY_AUTH_MODE:-node}"
       ;;
     *)
-      printf '%s\n' "auto"
+      printf '%s\n' "node"
       ;;
   esac
 }
@@ -44,7 +44,7 @@ function createCluster() {
     rc=$(az identity show --name ${AZURE_CLUSTER_AGENTPOOL} --resource-group ${AZURE_CLUSTER_AGENTPOOL_RG} --query 'principalId' --output tsv)
     rc=$(az role assignment create --assignee $rc --role 'Storage Blob Data Reader' --scope /subscriptions/f428689e-c379-4712-a5f4-408c754f16ff/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.Storage/storageAccounts/${AZURE_STORAGE_ACCOUNT})  
   else
-    echo "No managed identity to be used, secret-only mode"
+    echo "No Azure managed-identity storage assignment requested"
   fi
   if [ -z "$rc" ]; then
     echo "AKS Cluster creation issue"
