@@ -877,6 +877,7 @@ int-test-azure-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-10h
+    - .needs-standard-build
     - .rules-cloud-runtime-or-main-or-mr
   id_tokens:
     GITLAB_OIDC_TOKEN:
@@ -888,18 +889,21 @@ int-test-azure-workflow-rehearsal:
     WORKFLOW_CLASS: integration-azure
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_AZURE_INTEGRATION
     REQUIRED_VARS: STAGING_AZURE_ACR_LOGIN_SERVER,STAGING_AZURE_STORAGE_ACCOUNT,STAGING_AZURE_STORAGE_ACCOUNT_KEY,STAGING_AZURE_TEST_CONTAINER,STAGING_AZURE_INDEXES_CONTAINER
-    WORKFLOW_NOTES: The current GitHub-compatible rehearsal path still creates a disposable AKS cluster and should prefer GitLab OIDC plus project-level Azure client and tenant variables. A protected `STAGING_AKS_KUBECONFIG` file variable remains available only as a fallback for debug or break-glass validation.
+    WORKFLOW_NOTES: The current GitHub-compatible rehearsal path still creates a disposable AKS cluster, but it now reuses the canonical operator image built by the standard staging build and promotes that image into staging ACR before deployment. GitLab OIDC plus project-level Azure client and tenant variables remain the preferred auth path. A protected `STAGING_AKS_KUBECONFIG` file variable remains available only as a fallback for debug or break-glass validation.
     WORKFLOW_PLAN: |
-      1. Build the operator image in staging ACR only.
-      2. Create a disposable staging AKS cluster by default; use protected kubeconfig input only when a debug fallback is required.
-      3. Run the Azure sanity integration path and collect logs.
-      4. Clean only the resources created by the rehearsal path that was actually used.
+      1. Reuse the canonical operator image already built by the standard staging build.
+      2. Promote that image into staging ACR only.
+      3. Mirror the configured Splunk Enterprise image into staging ACR only.
+      4. Create a disposable staging AKS cluster by default; use protected kubeconfig input only when a debug fallback is required.
+      5. Run the Azure sanity integration path and collect logs.
+      6. Clean only the resources created by the rehearsal path that was actually used.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-azure-workflow-rehearsal.sh
 
 int-test-gcp-workflow-rehearsal:
   extends:
     - .workflow-rehearsal-template
     - .integration-family-10h
+    - .needs-standard-build
     - .rules-cloud-runtime-or-main-or-mr
   id_tokens:
     GITLAB_OIDC_TOKEN:
@@ -911,12 +915,14 @@ int-test-gcp-workflow-rehearsal:
     WORKFLOW_CLASS: integration-gcp
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_GCP_INTEGRATION
     REQUIRED_VARS: STAGING_GCP_ARTIFACT_REGISTRY,STAGING_GCP_PROJECT_ID,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: The current GitHub-compatible rehearsal path still creates a disposable GKE cluster and should prefer GitLab OIDC plus project-level GCP workload-identity variables. A protected `STAGING_GKE_KUBECONFIG` file variable remains available only as a fallback for debug or break-glass validation.
+    WORKFLOW_NOTES: The current GitHub-compatible rehearsal path still creates a disposable GKE cluster, but it now reuses the canonical operator image built by the standard staging build and promotes that image into staging Artifact Registry before deployment. GitLab OIDC plus project-level GCP workload-identity variables remain the preferred auth path. A protected `STAGING_GKE_KUBECONFIG` file variable remains available only as a fallback for debug or break-glass validation.
     WORKFLOW_PLAN: |
-      1. Build the operator image in staging Artifact Registry only.
-      2. Create a disposable staging GKE cluster by default; use protected kubeconfig input only when a debug fallback is required.
-      3. Run the GCP integration matrix and collect logs.
-      4. Clean only the resources created by the rehearsal path that was actually used.
+      1. Reuse the canonical operator image already built by the standard staging build.
+      2. Promote that image into staging Artifact Registry only.
+      3. Mirror the configured Splunk Enterprise image into staging Artifact Registry only.
+      4. Create a disposable staging GKE cluster by default; use protected kubeconfig input only when a debug fallback is required.
+      5. Run the GCP integration matrix and collect logs.
+      6. Clean only the resources created by the rehearsal path that was actually used.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-gcp-workflow-rehearsal.sh
 
 distroless-int-test-workflow-rehearsal:

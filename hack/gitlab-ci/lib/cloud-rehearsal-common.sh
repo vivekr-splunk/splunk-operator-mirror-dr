@@ -296,3 +296,59 @@ gcp_login_oidc() {
     --output-file="${cred_file}" >/dev/null
   gcloud auth login --cred-file="${cred_file}" --quiet >/dev/null
 }
+
+registry_host_for_image() {
+  image_ref="$1"
+  printf '%s' "${image_ref}" | cut -d/ -f1
+}
+
+image_ref_uses_ecr() {
+  image_ref="$1"
+  registry_host="$(registry_host_for_image "${image_ref}")"
+
+  case "${registry_host}" in
+    *.dkr.ecr.*.amazonaws.com)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+login_source_registry_for_image() {
+  source_image_ref="$1"
+  source_registry_host="$(registry_host_for_image "${source_image_ref}")"
+
+  if ! image_ref_uses_ecr "${source_image_ref}"; then
+    return 0
+  fi
+
+  require_envs STAGING_AWS_ACCESS_KEY_ID STAGING_AWS_SECRET_ACCESS_KEY
+
+  export AWS_ACCESS_KEY_ID="${STAGING_AWS_ACCESS_KEY_ID}"
+  export AWS_SECRET_ACCESS_KEY="${STAGING_AWS_SECRET_ACCESS_KEY}"
+  if [ -n "${STAGING_AWS_SESSION_TOKEN:-}" ]; then
+    export AWS_SESSION_TOKEN="${STAGING_AWS_SESSION_TOKEN}"
+  fi
+
+  resolve_ecr_region "${STAGING_AWS_DEFAULT_REGION:-}" "${source_registry_host}"
+  if [ -z "${RESOLVED_ECR_REGION}" ]; then
+    echo "Unable to determine source ECR region for ${source_image_ref}" >&2
+    return 1
+  fi
+
+  export AWS_DEFAULT_REGION="${RESOLVED_ECR_REGION}"
+  export AWS_REGION="${RESOLVED_ECR_REGION}"
+
+  aws ecr get-login-password --region "${RESOLVED_ECR_REGION}" | docker login --username AWS --password-stdin "${source_registry_host}"
+}
+
+promote_image_to_private_registry() {
+  source_image_ref="$1"
+  target_image_ref="$2"
+
+  docker pull "${source_image_ref}"
+  docker tag "${source_image_ref}" "${target_image_ref}"
+  docker push "${target_image_ref}"
+}

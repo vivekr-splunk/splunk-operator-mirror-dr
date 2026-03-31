@@ -14,12 +14,16 @@ cleanup_log="rehearsal/${WORKFLOW_SLUG}-cleanup.log"
 cluster_log="rehearsal/${WORKFLOW_SLUG}-cluster.log"
 build_log="rehearsal/${WORKFLOW_SLUG}-build.log"
 run_log="rehearsal/${WORKFLOW_SLUG}-run.log"
+image_ref_file="rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
+digest_file="rehearsal/${WORKFLOW_SLUG}-digest.txt"
 pod_log_dir="rehearsal/${WORKFLOW_SLUG}-pod-logs"
 integration_junit="rehearsal/${WORKFLOW_SLUG}-inttest-junit.xml"
 azure_creds_file="$(mktemp /tmp/${WORKFLOW_SLUG}-azure-creds.XXXXXX.json)"
 aks_kubeconfig_file="$(mktemp /tmp/${WORKFLOW_SLUG}-kubeconfig.XXXXXX)"
 cluster_mode="ephemeral-aks"
 cluster_created="false"
+build_image_ref_file="${BUILD_IMAGE_REF_FILE:-rehearsal/build-test-push-workflow-image-ref.txt}"
+build_image_digest_file="${BUILD_IMAGE_DIGEST_FILE:-rehearsal/build-test-push-workflow-digest.txt}"
 
 cleanup_and_exit() {
   rc="$1"
@@ -64,13 +68,17 @@ load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-contro
 resolve_enterprise_source_image
 ensure_jq
 ensure_azure_cli
-require_commands bash az docker make kubectl go jq base64
+require_commands bash aws az docker make kubectl go jq base64
 require_envs \
   STAGING_AZURE_ACR_LOGIN_SERVER \
   STAGING_AZURE_STORAGE_ACCOUNT \
   STAGING_AZURE_STORAGE_ACCOUNT_KEY \
   STAGING_AZURE_TEST_CONTAINER \
   STAGING_AZURE_INDEXES_CONTAINER
+require_file "${build_image_ref_file}" "canonical build image reference artifact"
+
+source_operator_image="$(cat "${build_image_ref_file}")"
+source_operator_image_tag="${source_operator_image##*:}"
 
 azure_client_id=""
 azure_client_secret=""
@@ -158,7 +166,7 @@ azure_registry_login_with_docker() {
 }
 
 operator_registry="${STAGING_AZURE_ACR_LOGIN_SERVER}"
-operator_image="${operator_registry}/splunk/splunk-operator:${CI_COMMIT_SHA}"
+operator_image="${operator_registry}/splunk/splunk-operator:${source_operator_image_tag}"
 enterprise_source_image="${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO}"
 cluster_name="az${CI_JOB_ID}"
 test_focus="${STAGING_AZURE_TEST_FOCUS:-azure_sanity}"
@@ -199,6 +207,7 @@ export STORAGE_ACCOUNT_KEY="${AZURE_STORAGE_ACCOUNT_KEY}"
 export ENTERPRISE_LICENSE_LOCATION="${STAGING_AZURE_ENTERPRISE_LICENSE_LOCATION:-test_licenses}"
 
 append_context "${context_file}" "workflow" "${WORKFLOW_SLUG}"
+append_context "${context_file}" "input_artifact" "${build_image_ref_file}"
 append_context "${context_file}" "cluster_mode" "${cluster_mode}"
 append_context "${context_file}" "cluster_provider" "${CLUSTER_PROVIDER}"
 append_context "${context_file}" "test_cluster_name" "${TEST_CLUSTER_NAME}"
@@ -207,6 +216,7 @@ append_context "${context_file}" "cluster_nodes" "${CLUSTER_NODES}"
 append_context "${context_file}" "cluster_wide" "${CLUSTER_WIDE}"
 append_context "${context_file}" "deployment_type" "${DEPLOYMENT_TYPE}"
 append_context "${context_file}" "operator_image" "${operator_image}"
+append_context "${context_file}" "source_operator_image" "${source_operator_image}"
 append_context "${context_file}" "enterprise_source_image" "${enterprise_source_image}"
 append_context "${context_file}" "source_mode" "${RESOLVED_SOK_SOURCE_MODE}"
 append_context "${context_file}" "trigger_kind" "${RESOLVED_SOK_TRIGGER_KIND}"
@@ -243,15 +253,18 @@ else
 fi
 append_context "${context_file}" "azure_auth_mode_effective" "${azure_auth_mode}"
 
+log_step "azure:operator-image:promote:start source=${source_operator_image} target=${operator_image}" | tee -a "${build_log}" >/dev/null
+login_source_registry_for_image "${source_operator_image}" >> "${build_log}" 2>&1
+promote_image_to_private_registry "${source_operator_image}" "${operator_image}" >> "${build_log}" 2>&1
+printf '%s\n' "${operator_image}" > "${image_ref_file}"
+copy_if_exists "${build_image_digest_file}" "${digest_file}" >/dev/null 2>&1 || true
+log_step "azure:operator-image:promote:complete" | tee -a "${build_log}" >/dev/null
+
 log_step "azure:registry-enterprise-image:start" | tee -a "${run_log}" >/dev/null
 PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(stage_enterprise_image_in_private_registry)"
 export SPLUNK_ENTERPRISE_IMAGE="${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 append_context "${context_file}" "private_splunk_enterprise_image" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 log_step "azure:registry-enterprise-image:complete ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" | tee -a "${run_log}" >/dev/null
-
-log_step "azure:build:start image=${operator_image}" | tee -a "${build_log}" >/dev/null
-make docker-buildx IMG="${operator_image}" >> "${build_log}" 2>&1
-log_step "azure:build:complete" | tee -a "${build_log}" >/dev/null
 
 if [ "${cluster_mode}" = "ephemeral-aks" ]; then
   log_step "azure:cluster-up:start ${TEST_CLUSTER_NAME}" | tee -a "${cluster_log}" >/dev/null

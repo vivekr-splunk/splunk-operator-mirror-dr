@@ -14,6 +14,8 @@ cleanup_log="rehearsal/${WORKFLOW_SLUG}-cleanup.log"
 cluster_log="rehearsal/${WORKFLOW_SLUG}-cluster.log"
 build_log="rehearsal/${WORKFLOW_SLUG}-build.log"
 run_log="rehearsal/${WORKFLOW_SLUG}-run.log"
+image_ref_file="rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
+digest_file="rehearsal/${WORKFLOW_SLUG}-digest.txt"
 pod_log_root="rehearsal/${WORKFLOW_SLUG}-pod-logs"
 integration_junit="rehearsal/${WORKFLOW_SLUG}-inttest-junit.xml"
 gcp_key_file="$(mktemp /tmp/${WORKFLOW_SLUG}-gcp-key.XXXXXX.json)"
@@ -22,6 +24,8 @@ gcp_oidc_cred_file="$(mktemp /tmp/${WORKFLOW_SLUG}-gcp-cred.XXXXXX.json)"
 gke_kubeconfig_file="$(mktemp /tmp/${WORKFLOW_SLUG}-kubeconfig.XXXXXX)"
 cluster_mode="ephemeral-gke"
 cluster_created="false"
+build_image_ref_file="${BUILD_IMAGE_REF_FILE:-rehearsal/build-test-push-workflow-image-ref.txt}"
+build_image_digest_file="${BUILD_IMAGE_DIGEST_FILE:-rehearsal/build-test-push-workflow-digest.txt}"
 
 cleanup_and_exit() {
   rc="$1"
@@ -68,10 +72,14 @@ load_optional_release_controller_env "${CI_PROJECT_DIR}/rehearsal/release-contro
 resolve_enterprise_source_image
 ensure_jq
 ensure_gcloud_cli
-require_commands bash gcloud docker make kubectl go jq base64
+require_commands bash aws gcloud docker make kubectl go jq base64
 require_envs \
   STAGING_GCP_ARTIFACT_REGISTRY \
   STAGING_GCP_PROJECT_ID
+require_file "${build_image_ref_file}" "canonical build image reference artifact"
+
+source_operator_image="$(cat "${build_image_ref_file}")"
+source_operator_image_tag="${source_operator_image##*:}"
 
 gcp_has_service_account_key="false"
 gcp_auth_mode="service-account-key"
@@ -99,7 +107,7 @@ else
 fi
 
 operator_registry="${STAGING_GCP_ARTIFACT_REGISTRY}"
-operator_image="${operator_registry}/splunk/splunk-operator:${CI_COMMIT_SHA}"
+operator_image="${operator_registry}/splunk/splunk-operator:${source_operator_image_tag}"
 enterprise_source_image="${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO}"
 cluster_name="gke-${CI_JOB_ID}"
 test_focus="${STAGING_GCP_TEST_FOCUS:-s1_gcp_sanity}"
@@ -201,6 +209,13 @@ else
 fi
 log_step "gcp:auth:complete" | tee -a "${run_log}" >/dev/null
 
+log_step "gcp:operator-image:promote:start source=${source_operator_image} target=${operator_image}" | tee -a "${build_log}" >/dev/null
+login_source_registry_for_image "${source_operator_image}" >> "${build_log}" 2>&1
+promote_image_to_private_registry "${source_operator_image}" "${operator_image}" >> "${build_log}" 2>&1
+printf '%s\n' "${operator_image}" > "${image_ref_file}"
+copy_if_exists "${build_image_digest_file}" "${digest_file}" >/dev/null 2>&1 || true
+log_step "gcp:operator-image:promote:complete" | tee -a "${build_log}" >/dev/null
+
 log_step "gcp:registry-enterprise-image:start" | tee -a "${run_log}" >/dev/null
 PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(stage_enterprise_image_in_private_registry)"
 export SPLUNK_ENTERPRISE_IMAGE="${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
@@ -216,6 +231,8 @@ append_context "${context_file}" "cluster_nodes" "${CLUSTER_NODES}"
 append_context "${context_file}" "cluster_wide" "${CLUSTER_WIDE}"
 append_context "${context_file}" "deployment_type" "${DEPLOYMENT_TYPE}"
 append_context "${context_file}" "operator_image" "${operator_image}"
+append_context "${context_file}" "input_artifact" "${build_image_ref_file}"
+append_context "${context_file}" "source_operator_image" "${source_operator_image}"
 append_context "${context_file}" "enterprise_source_image" "${enterprise_source_image}"
 append_context "${context_file}" "source_mode" "${RESOLVED_SOK_SOURCE_MODE}"
 append_context "${context_file}" "trigger_kind" "${RESOLVED_SOK_TRIGGER_KIND}"
@@ -227,10 +244,6 @@ append_context "${context_file}" "gcp_auth_mode_effective" "${gcp_auth_mode}"
 append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
 append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
-
-log_step "gcp:build:start image=${operator_image}" | tee -a "${build_log}" >/dev/null
-make docker-buildx IMG="${operator_image}" >> "${build_log}" 2>&1
-log_step "gcp:build:complete" | tee -a "${build_log}" >/dev/null
 
 if [ "${cluster_mode}" = "ephemeral-gke" ]; then
   log_step "gcp:cluster-up:start ${TEST_CLUSTER_NAME}" | tee -a "${cluster_log}" >/dev/null
