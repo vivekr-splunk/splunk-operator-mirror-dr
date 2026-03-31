@@ -145,22 +145,60 @@ gcp_login_service_account_key() {
   gcloud auth activate-service-account --key-file="${gcp_key_file}" >/dev/null
 }
 
+gcp_auth_with_oidc() {
+  gcp_registry_host="$(printf '%s' "${GCP_ARTIFACT_REGISTRY}" | cut -d/ -f1)"
+  auth_rc=0
+
+  set +e
+  gcp_login_oidc "${gcp_oidc_token_file}" "${gcp_oidc_cred_file}" >> "${run_log}" 2>&1
+  auth_rc=$?
+  if [ "${auth_rc}" -eq 0 ]; then
+    gcloud config set project "${GCP_PROJECT_ID}" >> "${run_log}" 2>&1
+    auth_rc=$?
+  fi
+  if [ "${auth_rc}" -eq 0 ]; then
+    gcloud auth configure-docker "${gcp_registry_host}" --quiet >> "${run_log}" 2>&1
+    auth_rc=$?
+  fi
+  set -e
+
+  return "${auth_rc}"
+}
+
+gcp_auth_with_service_account_key() {
+  gcp_registry_host="$(printf '%s' "${GCP_ARTIFACT_REGISTRY}" | cut -d/ -f1)"
+  auth_rc=0
+
+  set +e
+  gcp_login_service_account_key >> "${run_log}" 2>&1
+  auth_rc=$?
+  if [ "${auth_rc}" -eq 0 ]; then
+    gcloud config set project "${GCP_PROJECT_ID}" >> "${run_log}" 2>&1
+    auth_rc=$?
+  fi
+  if [ "${auth_rc}" -eq 0 ]; then
+    gcloud auth configure-docker "${gcp_registry_host}" --quiet >> "${run_log}" 2>&1
+    auth_rc=$?
+  fi
+  set -e
+
+  return "${auth_rc}"
+}
+
 log_step "gcp:auth:start" | tee -a "${run_log}" >/dev/null
 if [ "${gcp_auth_mode}" = "oidc" ]; then
-  if gcp_login_oidc "${gcp_oidc_token_file}" "${gcp_oidc_cred_file}" >> "${run_log}" 2>&1; then
+  if gcp_auth_with_oidc; then
     :
   elif [ "${gcp_has_service_account_key}" = "true" ]; then
     log_step "gcp:auth:oidc-fallback service-account-key" | tee -a "${run_log}" >/dev/null
     gcp_auth_mode="service-account-key"
-    gcp_login_service_account_key >> "${run_log}" 2>&1
+    gcp_auth_with_service_account_key
   else
     exit 1
   fi
 else
-  gcp_login_service_account_key >> "${run_log}" 2>&1
+  gcp_auth_with_service_account_key
 fi
-gcloud config set project "${GCP_PROJECT_ID}" >> "${run_log}" 2>&1
-gcloud auth configure-docker "$(printf '%s' "${GCP_ARTIFACT_REGISTRY}" | cut -d/ -f1)" --quiet >> "${run_log}" 2>&1
 log_step "gcp:auth:complete" | tee -a "${run_log}" >/dev/null
 
 log_step "gcp:registry-enterprise-image:start" | tee -a "${run_log}" >/dev/null

@@ -122,6 +122,41 @@ azure_login_service_principal() {
   fi
 }
 
+azure_auth_with_oidc() {
+  auth_rc=0
+
+  set +e
+  azure_login_oidc >> "${run_log}" 2>&1
+  auth_rc=$?
+  if [ "${auth_rc}" -eq 0 ]; then
+    az acr login --name "${AZURE_CONTAINER_REGISTRY}" >> "${run_log}" 2>&1
+    auth_rc=$?
+  fi
+  set -e
+
+  return "${auth_rc}"
+}
+
+azure_auth_with_service_principal() {
+  auth_rc=0
+
+  set +e
+  azure_login_service_principal >> "${run_log}" 2>&1
+  auth_rc=$?
+  if [ "${auth_rc}" -eq 0 ]; then
+    az acr login --name "${AZURE_CONTAINER_REGISTRY}" >> "${run_log}" 2>&1
+    auth_rc=$?
+  fi
+  set -e
+
+  return "${auth_rc}"
+}
+
+azure_registry_login_with_docker() {
+  require_envs STAGING_AZURE_ACR_DOCKER_USERNAME STAGING_AZURE_ACR_DOCKER_PASSWORD
+  printf '%s' "${STAGING_AZURE_ACR_DOCKER_PASSWORD}" | docker login "${operator_registry}" -u "${STAGING_AZURE_ACR_DOCKER_USERNAME}" --password-stdin >> "${run_log}" 2>&1
+}
+
 operator_registry="${STAGING_AZURE_ACR_LOGIN_SERVER}"
 operator_image="${operator_registry}/splunk/splunk-operator:${CI_COMMIT_SHA}"
 enterprise_source_image="${RESOLVED_SPLUNK_ENTERPRISE_IMAGE_NO_DOCKER_IO}"
@@ -186,33 +221,27 @@ append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 
 if [ "${azure_auth_mode}" = "oidc" ]; then
   log_step "azure:auth:start mode=oidc" | tee -a "${run_log}" >/dev/null
-  if azure_login_oidc >> "${run_log}" 2>&1; then
+  if azure_auth_with_oidc; then
     log_step "azure:auth:complete" | tee -a "${run_log}" >/dev/null
   elif [ "${cluster_mode}" = "ephemeral-aks" ] && [ "${azure_has_service_principal}" = "true" ]; then
     log_step "azure:auth:oidc-fallback service-principal" | tee -a "${run_log}" >/dev/null
     azure_auth_mode="service-principal"
-    azure_login_service_principal >> "${run_log}" 2>&1
+    azure_auth_with_service_principal
     log_step "azure:auth:complete" | tee -a "${run_log}" >/dev/null
   else
     exit 1
   fi
 elif [ "${cluster_mode}" = "ephemeral-aks" ]; then
   log_step "azure:auth:start mode=service-principal" | tee -a "${run_log}" >/dev/null
-  azure_login_service_principal >> "${run_log}" 2>&1
+  azure_auth_with_service_principal
   log_step "azure:auth:complete" | tee -a "${run_log}" >/dev/null
 else
   log_step "azure:auth:skipped mode=${cluster_mode}" | tee -a "${run_log}" >/dev/null
+  log_step "azure:registry-login:start ${operator_registry}" | tee -a "${run_log}" >/dev/null
+  azure_registry_login_with_docker
+  log_step "azure:registry-login:complete" | tee -a "${run_log}" >/dev/null
 fi
 append_context "${context_file}" "azure_auth_mode_effective" "${azure_auth_mode}"
-
-log_step "azure:registry-login:start ${operator_registry}" | tee -a "${run_log}" >/dev/null
-if [ "${azure_auth_mode}" = "oidc" ] || [ "${azure_auth_mode}" = "service-principal" ]; then
-  az acr login --name "${AZURE_CONTAINER_REGISTRY}" >> "${run_log}" 2>&1
-else
-  require_envs STAGING_AZURE_ACR_DOCKER_USERNAME STAGING_AZURE_ACR_DOCKER_PASSWORD
-  printf '%s' "${STAGING_AZURE_ACR_DOCKER_PASSWORD}" | docker login "${operator_registry}" -u "${STAGING_AZURE_ACR_DOCKER_USERNAME}" --password-stdin >> "${run_log}" 2>&1
-fi
-log_step "azure:registry-login:complete" | tee -a "${run_log}" >/dev/null
 
 log_step "azure:registry-enterprise-image:start" | tee -a "${run_log}" >/dev/null
 PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$(stage_enterprise_image_in_private_registry)"
