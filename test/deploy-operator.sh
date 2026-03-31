@@ -54,11 +54,34 @@ patch_operator_registry_access() {
   fi
 
   PRIVATE_REGISTRY_SECRET_NAME="${PRIVATE_REGISTRY_SECRET_NAME:-private-registry-credentials}"
-  kubectl patch serviceaccount controller-manager -n splunk-operator --type=merge \
-    -p "{\"imagePullSecrets\":[{\"name\":\"${PRIVATE_REGISTRY_SECRET_NAME}\"}]}"
-  kubectl patch deployment splunk-operator-controller-manager -n splunk-operator --type=merge \
-    -p "{\"spec\":{\"template\":{\"spec\":{\"imagePullSecrets\":[{\"name\":\"${PRIVATE_REGISTRY_SECRET_NAME}\"}]}}}}"
-  kubectl rollout restart deployment splunk-operator-controller-manager -n splunk-operator >/dev/null 2>&1 || true
+  OPERATOR_DEPLOYMENT_NAME="$(kubectl get deployment -n splunk-operator -l control-plane=controller-manager -o jsonpath='{.items[0].metadata.name}')"
+  if [ -z "${OPERATOR_DEPLOYMENT_NAME}" ]; then
+    echo "Unable to locate operator deployment in splunk-operator namespace"
+    return 1
+  fi
+
+  OPERATOR_SERVICE_ACCOUNT_NAME="$(kubectl get deployment "${OPERATOR_DEPLOYMENT_NAME}" -n splunk-operator -o jsonpath='{.spec.template.spec.serviceAccountName}')"
+  if [ -z "${OPERATOR_SERVICE_ACCOUNT_NAME}" ]; then
+    OPERATOR_SERVICE_ACCOUNT_NAME="default"
+  fi
+
+  echo "Patching operator registry access with secret ${PRIVATE_REGISTRY_SECRET_NAME} on service account ${OPERATOR_SERVICE_ACCOUNT_NAME} and deployment ${OPERATOR_DEPLOYMENT_NAME}"
+  kubectl patch serviceaccount "${OPERATOR_SERVICE_ACCOUNT_NAME}" -n splunk-operator --type=merge \
+    -p "{\"imagePullSecrets\":[{\"name\":\"${PRIVATE_REGISTRY_SECRET_NAME}\"}]}" >/dev/null
+  kubectl patch deployment "${OPERATOR_DEPLOYMENT_NAME}" -n splunk-operator --type=merge \
+    -p "{\"spec\":{\"template\":{\"spec\":{\"imagePullSecrets\":[{\"name\":\"${PRIVATE_REGISTRY_SECRET_NAME}\"}]}}}}" >/dev/null
+
+  IMAGE_PULL_SECRETS="$(kubectl get deployment "${OPERATOR_DEPLOYMENT_NAME}" -n splunk-operator -o jsonpath='{.spec.template.spec.imagePullSecrets[*].name}')"
+  echo "Operator deployment image pull secrets: ${IMAGE_PULL_SECRETS:-<none>}"
+  case " ${IMAGE_PULL_SECRETS} " in
+    *" ${PRIVATE_REGISTRY_SECRET_NAME} "*) ;;
+    *)
+      echo "Operator deployment does not reference the expected image pull secret ${PRIVATE_REGISTRY_SECRET_NAME}"
+      return 1
+      ;;
+  esac
+
+  kubectl rollout restart deployment "${OPERATOR_DEPLOYMENT_NAME}" -n splunk-operator >/dev/null
 }
 
 ensure_private_registry_pull_secret
