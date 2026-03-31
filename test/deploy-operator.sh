@@ -16,6 +16,22 @@ fi
 PRIVATE_SPLUNK_OPERATOR_IMAGE="$1"
 PRIVATE_SPLUNK_ENTERPRISE_IMAGE="$2"
 
+effective_private_registry_auth_mode() {
+  case "${PRIVATE_REGISTRY_AUTH_MODE:-auto}" in
+    node|secret)
+      printf '%s\n' "${PRIVATE_REGISTRY_AUTH_MODE}"
+      return
+      ;;
+  esac
+
+  if [ -n "${PRIVATE_REGISTRY_SERVER:-}" ] && [ -n "${PRIVATE_REGISTRY_USERNAME:-}" ] && [ -n "${PRIVATE_REGISTRY_PASSWORD:-}" ]; then
+    printf '%s\n' "secret"
+    return
+  fi
+
+  printf '%s\n' "node"
+}
+
 wait_for_enterprise_crds() {
   for crd in \
     clustermanagers.enterprise.splunk.com \
@@ -33,9 +49,14 @@ wait_for_enterprise_crds() {
 }
 
 ensure_private_registry_pull_secret() {
-  if [ -z "${PRIVATE_REGISTRY_SERVER:-}" ] || [ -z "${PRIVATE_REGISTRY_USERNAME:-}" ] || [ -z "${PRIVATE_REGISTRY_PASSWORD:-}" ]; then
+  if [ "$(effective_private_registry_auth_mode)" != "secret" ]; then
     PRIVATE_REGISTRY_HELM_FLAG=""
     return 0
+  fi
+
+  if [ -z "${PRIVATE_REGISTRY_SERVER:-}" ] || [ -z "${PRIVATE_REGISTRY_USERNAME:-}" ] || [ -z "${PRIVATE_REGISTRY_PASSWORD:-}" ]; then
+    echo "PRIVATE_REGISTRY_AUTH_MODE=secret requires PRIVATE_REGISTRY_SERVER/USERNAME/PASSWORD"
+    return 1
   fi
 
   PRIVATE_REGISTRY_SECRET_NAME="${PRIVATE_REGISTRY_SECRET_NAME:-private-registry-credentials}"
@@ -49,8 +70,13 @@ ensure_private_registry_pull_secret() {
 }
 
 patch_operator_registry_access() {
-  if [ -z "${PRIVATE_REGISTRY_SERVER:-}" ] || [ -z "${PRIVATE_REGISTRY_USERNAME:-}" ] || [ -z "${PRIVATE_REGISTRY_PASSWORD:-}" ]; then
+  if [ "$(effective_private_registry_auth_mode)" != "secret" ]; then
     return 0
+  fi
+
+  if [ -z "${PRIVATE_REGISTRY_SERVER:-}" ] || [ -z "${PRIVATE_REGISTRY_USERNAME:-}" ] || [ -z "${PRIVATE_REGISTRY_PASSWORD:-}" ]; then
+    echo "PRIVATE_REGISTRY_AUTH_MODE=secret requires PRIVATE_REGISTRY_SERVER/USERNAME/PASSWORD"
+    return 1
   fi
 
   PRIVATE_REGISTRY_SECRET_NAME="${PRIVATE_REGISTRY_SECRET_NAME:-private-registry-credentials}"

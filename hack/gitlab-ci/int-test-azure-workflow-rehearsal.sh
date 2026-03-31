@@ -18,6 +18,7 @@ image_ref_file="rehearsal/${WORKFLOW_SLUG}-image-ref.txt"
 digest_file="rehearsal/${WORKFLOW_SLUG}-digest.txt"
 pod_log_dir="rehearsal/${WORKFLOW_SLUG}-pod-logs"
 integration_junit="rehearsal/${WORKFLOW_SLUG}-inttest-junit.xml"
+registry_auth_mode_file="rehearsal/${WORKFLOW_SLUG}-registry-auth-mode.txt"
 azure_creds_file="$(mktemp /tmp/${WORKFLOW_SLUG}-azure-creds.XXXXXX.json)"
 aks_kubeconfig_file="$(mktemp /tmp/${WORKFLOW_SLUG}-kubeconfig.XXXXXX)"
 cluster_mode="ephemeral-aks"
@@ -196,6 +197,7 @@ export PRIVATE_REGISTRY_SERVER="${STAGING_AZURE_ACR_LOGIN_SERVER}"
 export PRIVATE_REGISTRY_USERNAME="${STAGING_AZURE_ACR_DOCKER_USERNAME:-}"
 export PRIVATE_REGISTRY_PASSWORD="${STAGING_AZURE_ACR_DOCKER_PASSWORD:-}"
 export PRIVATE_REGISTRY_SECRET_NAME="${STAGING_AZURE_PULL_SECRET_NAME:-private-registry-credentials}"
+export PRIVATE_REGISTRY_AUTH_MODE="${STAGING_AZURE_REGISTRY_PULL_MODE:-auto}"
 export SPLUNK_OPERATOR_IMAGE="${operator_image}"
 export SPLUNK_ENTERPRISE_IMAGE="${enterprise_source_image}"
 export TEST_FOCUS="${test_focus}"
@@ -229,6 +231,7 @@ append_context "${context_file}" "azure_resource_group" "${AZURE_RESOURCE_GROUP}
 append_context "${context_file}" "azure_container_registry" "${AZURE_CONTAINER_REGISTRY}"
 append_context "${context_file}" "azure_region" "${AZURE_REGION}"
 append_context "${context_file}" "azure_auth_mode_requested" "${azure_auth_mode}"
+append_context "${context_file}" "azure_registry_pull_mode_requested" "${PRIVATE_REGISTRY_AUTH_MODE}"
 append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
 append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
@@ -270,6 +273,7 @@ export SPLUNK_ENTERPRISE_IMAGE="${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 append_context "${context_file}" "private_splunk_enterprise_image" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}"
 log_step "azure:registry-enterprise-image:complete ${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" | tee -a "${run_log}" >/dev/null
 
+rm -f "${registry_auth_mode_file}"
 if [ "${cluster_mode}" = "ephemeral-aks" ]; then
   log_step "azure:cluster-up:start ${TEST_CLUSTER_NAME}" | tee -a "${cluster_log}" >/dev/null
   make cluster-up 2>&1 | tee -a "${cluster_log}"
@@ -280,6 +284,13 @@ else
 fi
 kubectl get nodes -o wide 2>&1 | tee -a "${cluster_log}"
 kubectl get pods -A 2>&1 | tee -a "${cluster_log}"
+
+if [ -f "${registry_auth_mode_file}" ]; then
+  PRIVATE_REGISTRY_AUTH_MODE="$(tr -d '\r\n' < "${registry_auth_mode_file}")"
+  export PRIVATE_REGISTRY_AUTH_MODE
+fi
+append_context "${context_file}" "azure_registry_pull_mode_effective" "${PRIVATE_REGISTRY_AUTH_MODE}"
+log_step "azure:registry-pull-mode ${PRIVATE_REGISTRY_AUTH_MODE}" | tee -a "${run_log}" >/dev/null
 
 log_step "azure:deploy-operator:start" | tee -a "${run_log}" >/dev/null
 bash "${CI_PROJECT_DIR}/test/deploy-operator.sh" "${operator_image}" "${PRIVATE_SPLUNK_ENTERPRISE_IMAGE}" >> "${run_log}" 2>&1

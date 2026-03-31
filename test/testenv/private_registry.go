@@ -25,6 +25,10 @@ type dockerConfigFile struct {
 }
 
 func privateRegistryPullSecretConfig() (string, string, string, string, bool) {
+	if privateRegistryAuthMode() != "secret" {
+		return "", "", "", "", false
+	}
+
 	secretName := os.Getenv("PRIVATE_REGISTRY_SECRET_NAME")
 	if secretName == "" {
 		secretName = defaultPrivateRegistryPullSecretName
@@ -38,6 +42,23 @@ func privateRegistryPullSecretConfig() (string, string, string, string, bool) {
 	}
 
 	return secretName, server, username, password, true
+}
+
+func privateRegistryAuthMode() string {
+	mode := os.Getenv("PRIVATE_REGISTRY_AUTH_MODE")
+	switch mode {
+	case "node", "secret":
+		return mode
+	}
+
+	server := os.Getenv("PRIVATE_REGISTRY_SERVER")
+	username := os.Getenv("PRIVATE_REGISTRY_USERNAME")
+	password := os.Getenv("PRIVATE_REGISTRY_PASSWORD")
+	if server != "" && username != "" && password != "" {
+		return "secret"
+	}
+
+	return "node"
 }
 
 func privateRegistryPullSecretRefs() []corev1.LocalObjectReference {

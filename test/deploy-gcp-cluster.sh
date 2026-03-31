@@ -32,6 +32,12 @@ function deleteCluster() {
 }
 
 function createCluster() {
+  node_service_account_args=()
+  if [[ -n "${GCP_NODE_SERVICE_ACCOUNT_EMAIL}" ]]; then
+    echo "Using GKE node service account ${GCP_NODE_SERVICE_ACCOUNT_EMAIL}"
+    node_service_account_args=(--service-account "${GCP_NODE_SERVICE_ACCOUNT_EMAIL}")
+  fi
+
   # Deploy gcloud cluster if not deployed
   rc=$(which gcloud)
   if [ -z "$rc" ]; then
@@ -49,6 +55,7 @@ function createCluster() {
       --subnetwork ${GCP_SUBNETWORK} \
       --machine-type n2-standard-8  \
       --scopes "https://www.googleapis.com/auth/cloud-platform" \
+      "${node_service_account_args[@]}" \
       --enable-ip-alias 
     if [ $? -ne 0 ]; then
       echo "Unable to create cluster - ${TEST_CLUSTER_NAME}"

@@ -1,5 +1,26 @@
 #!/bin/bash
 
+azure_scriptdir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+azure_topdir=$(cd "${azure_scriptdir}/.." && pwd)
+registry_auth_mode_file="${azure_topdir}/rehearsal/azure-registry-auth-mode.txt"
+
+recordRegistryAuthMode() {
+  mkdir -p "$(dirname "${registry_auth_mode_file}")"
+  printf '%s\n' "$1" > "${registry_auth_mode_file}"
+  echo "Azure registry pull mode resolved to: $1"
+}
+
+requestedRegistryAuthMode() {
+  case "${PRIVATE_REGISTRY_AUTH_MODE:-auto}" in
+    node|secret|auto)
+      printf '%s\n' "${PRIVATE_REGISTRY_AUTH_MODE:-auto}"
+      ;;
+    *)
+      printf '%s\n' "auto"
+      ;;
+  esac
+}
+
 function deleteCluster() {
   echo "Delete Azure AKS Cluster ${TEST_CLUSTER_NAME}"
   tools/cleanup.sh
@@ -7,6 +28,8 @@ function deleteCluster() {
 }
 
 function createCluster() {
+  rm -f "${registry_auth_mode_file}"
+
   # Login to Container Registry (needed to push docker images later on)
   rc=$(az acr login --name ${AZURE_CONTAINER_REGISTRY})
     if [ -z "$rc" ]; then
@@ -28,12 +51,47 @@ function createCluster() {
     return 1
   fi
 
-  # Prefer imagePullSecrets when explicit registry credentials are available.
+  registry_auth_mode="$(requestedRegistryAuthMode)"
+  has_registry_pull_secret="false"
   if [[ -n "${PRIVATE_REGISTRY_SERVER}" && -n "${PRIVATE_REGISTRY_USERNAME}" && -n "${PRIVATE_REGISTRY_PASSWORD}" ]] ;then
-    echo "Skipping AKS ACR attach; Kubernetes imagePullSecrets will provide registry access"
-  else
-    rc=$(az aks update --resource-group ${AZURE_RESOURCE_GROUP} --name ${TEST_CLUSTER_NAME} --attach-acr ${AZURE_CONTAINER_REGISTRY})
+    has_registry_pull_secret="true"
   fi
+
+  case "${registry_auth_mode}" in
+    node)
+      attach_output="$(az aks update --resource-group ${AZURE_RESOURCE_GROUP} --name ${TEST_CLUSTER_NAME} --attach-acr ${AZURE_CONTAINER_REGISTRY} 2>&1)"
+      attach_rc=$?
+      echo "${attach_output}"
+      if [[ "${attach_rc}" -ne 0 ]] ;then
+        echo "AKS ACR attach failed while PRIVATE_REGISTRY_AUTH_MODE=node"
+        return 1
+      fi
+      recordRegistryAuthMode "node"
+      ;;
+    secret)
+      if [[ "${has_registry_pull_secret}" != "true" ]] ;then
+        echo "PRIVATE_REGISTRY_AUTH_MODE=secret requires PRIVATE_REGISTRY_SERVER/USERNAME/PASSWORD"
+        return 1
+      fi
+      echo "Using Kubernetes imagePullSecrets for ACR access"
+      recordRegistryAuthMode "secret"
+      ;;
+    auto)
+      attach_output="$(az aks update --resource-group ${AZURE_RESOURCE_GROUP} --name ${TEST_CLUSTER_NAME} --attach-acr ${AZURE_CONTAINER_REGISTRY} 2>&1)"
+      attach_rc=$?
+      echo "${attach_output}"
+      if [[ "${attach_rc}" -eq 0 ]] ;then
+        recordRegistryAuthMode "node"
+      elif [[ "${has_registry_pull_secret}" == "true" ]] ;then
+        echo "AKS ACR attach failed; falling back to Kubernetes imagePullSecrets"
+        recordRegistryAuthMode "secret"
+      else
+        echo "AKS ACR attach failed and no Kubernetes pull-secret credentials were supplied"
+        return 1
+      fi
+      ;;
+  esac
+
   rc=$(az aks get-credentials --resource-group ${AZURE_RESOURCE_GROUP} --name ${TEST_CLUSTER_NAME} --overwrite-existing)
 
   # List created nodes
