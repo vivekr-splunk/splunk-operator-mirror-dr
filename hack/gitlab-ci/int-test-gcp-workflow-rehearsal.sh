@@ -21,6 +21,7 @@ gcp_oidc_token_file="$(mktemp /tmp/${WORKFLOW_SLUG}-gcp-token.XXXXXX.jwt)"
 gcp_oidc_cred_file="$(mktemp /tmp/${WORKFLOW_SLUG}-gcp-cred.XXXXXX.json)"
 gke_kubeconfig_file="$(mktemp /tmp/${WORKFLOW_SLUG}-kubeconfig.XXXXXX)"
 cluster_mode="ephemeral-gke"
+cluster_created="false"
 
 cleanup_and_exit() {
   rc="$1"
@@ -35,11 +36,11 @@ cleanup_and_exit() {
 
   log_step "cleanup:make-cleanup" | tee -a "${cleanup_log}" >/dev/null
   make cleanup >> "${cleanup_log}" 2>&1 || cleanup_rc=1
-  if [ "${cluster_mode}" = "ephemeral-gke" ]; then
+  if [ "${cluster_mode}" = "ephemeral-gke" ] && [ "${cluster_created}" = "true" ]; then
     log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
     make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
   else
-    log_step "cleanup:cluster-down skipped mode=${cluster_mode}" | tee -a "${cleanup_log}" >/dev/null
+    log_step "cleanup:cluster-down skipped mode=${cluster_mode} created=${cluster_created}" | tee -a "${cleanup_log}" >/dev/null
   fi
   log_step "cleanup:complete cleanup_rc=${cleanup_rc}" | tee -a "${cleanup_log}" >/dev/null
 
@@ -72,17 +73,21 @@ require_envs \
   STAGING_GCP_ARTIFACT_REGISTRY \
   STAGING_GCP_PROJECT_ID
 
+gcp_has_service_account_key="false"
 gcp_auth_mode="service-account-key"
+if [ -n "${STAGING_GCP_SERVICE_ACCOUNT_KEY:-}" ]; then
+  materialize_json_secret "${STAGING_GCP_SERVICE_ACCOUNT_KEY}" "${gcp_key_file}"
+  gcp_has_service_account_key="true"
+fi
 if gcp_oidc_ready; then
   gcp_auth_mode="oidc"
-elif [ -n "${STAGING_GCP_SERVICE_ACCOUNT_KEY:-}" ]; then
+elif [ "${gcp_has_service_account_key}" = "true" ]; then
   gcp_auth_mode="service-account-key"
 else
   require_envs STAGING_GCP_SERVICE_ACCOUNT_KEY
 fi
 if [ "${gcp_auth_mode}" = "service-account-key" ]; then
   require_envs STAGING_GCP_SERVICE_ACCOUNT_KEY
-  materialize_json_secret "${STAGING_GCP_SERVICE_ACCOUNT_KEY}" "${gcp_key_file}"
 fi
 
 if [ -n "${STAGING_GKE_KUBECONFIG:-}" ]; then
@@ -136,11 +141,23 @@ export ENTERPRISE_LICENSE_LOCATION="${STAGING_GCP_ENTERPRISE_LICENSE_LOCATION:-t
 export COMMIT_HASH="${CI_COMMIT_SHORT_SHA:-${CI_COMMIT_SHA}}"
 export GITLAB_MIGRATION_WORKFLOW="gcp"
 
+gcp_login_service_account_key() {
+  gcloud auth activate-service-account --key-file="${gcp_key_file}" >/dev/null
+}
+
 log_step "gcp:auth:start" | tee -a "${run_log}" >/dev/null
 if [ "${gcp_auth_mode}" = "oidc" ]; then
-  gcp_login_oidc "${gcp_oidc_token_file}" "${gcp_oidc_cred_file}" >> "${run_log}" 2>&1
+  if gcp_login_oidc "${gcp_oidc_token_file}" "${gcp_oidc_cred_file}" >> "${run_log}" 2>&1; then
+    :
+  elif [ "${gcp_has_service_account_key}" = "true" ]; then
+    log_step "gcp:auth:oidc-fallback service-account-key" | tee -a "${run_log}" >/dev/null
+    gcp_auth_mode="service-account-key"
+    gcp_login_service_account_key >> "${run_log}" 2>&1
+  else
+    exit 1
+  fi
 else
-  gcloud auth activate-service-account --key-file="${gcp_key_file}" >> "${run_log}" 2>&1
+  gcp_login_service_account_key >> "${run_log}" 2>&1
 fi
 gcloud config set project "${GCP_PROJECT_ID}" >> "${run_log}" 2>&1
 gcloud auth configure-docker "$(printf '%s' "${GCP_ARTIFACT_REGISTRY}" | cut -d/ -f1)" --quiet >> "${run_log}" 2>&1
@@ -168,7 +185,7 @@ append_context "${context_file}" "enterprise_image_source" "${RESOLVED_SPLUNK_EN
 append_context "${context_file}" "gcp_project_id" "${GCP_PROJECT_ID}"
 append_context "${context_file}" "gcp_region" "${GCP_REGION}"
 append_context "${context_file}" "gcp_zone" "${GCP_ZONE}"
-append_context "${context_file}" "gcp_auth_mode" "${gcp_auth_mode}"
+append_context "${context_file}" "gcp_auth_mode_effective" "${gcp_auth_mode}"
 append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
 append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
@@ -180,6 +197,7 @@ log_step "gcp:build:complete" | tee -a "${build_log}" >/dev/null
 if [ "${cluster_mode}" = "ephemeral-gke" ]; then
   log_step "gcp:cluster-up:start ${TEST_CLUSTER_NAME}" | tee -a "${cluster_log}" >/dev/null
   make cluster-up 2>&1 | tee -a "${cluster_log}"
+  cluster_created="true"
   log_step "gcp:cluster-up:complete" | tee -a "${cluster_log}" >/dev/null
 else
   log_step "gcp:cluster-up:skipped mode=${cluster_mode}" | tee -a "${cluster_log}" >/dev/null

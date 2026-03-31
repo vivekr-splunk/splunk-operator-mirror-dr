@@ -19,6 +19,7 @@ integration_junit="rehearsal/${WORKFLOW_SLUG}-inttest-junit.xml"
 azure_creds_file="$(mktemp /tmp/${WORKFLOW_SLUG}-azure-creds.XXXXXX.json)"
 aks_kubeconfig_file="$(mktemp /tmp/${WORKFLOW_SLUG}-kubeconfig.XXXXXX)"
 cluster_mode="ephemeral-aks"
+cluster_created="false"
 
 cleanup_and_exit() {
   rc="$1"
@@ -33,11 +34,11 @@ cleanup_and_exit() {
 
   log_step "cleanup:make-cleanup" | tee -a "${cleanup_log}" >/dev/null
   make cleanup >> "${cleanup_log}" 2>&1 || cleanup_rc=1
-  if [ "${cluster_mode}" = "ephemeral-aks" ]; then
+  if [ "${cluster_mode}" = "ephemeral-aks" ] && [ "${cluster_created}" = "true" ]; then
     log_step "cleanup:cluster-down" | tee -a "${cleanup_log}" >/dev/null
     make cluster-down >> "${cleanup_log}" 2>&1 || cleanup_rc=1
   else
-    log_step "cleanup:cluster-down skipped mode=${cluster_mode}" | tee -a "${cleanup_log}" >/dev/null
+    log_step "cleanup:cluster-down skipped mode=${cluster_mode} created=${cluster_created}" | tee -a "${cleanup_log}" >/dev/null
   fi
   log_step "cleanup:complete cleanup_rc=${cleanup_rc}" | tee -a "${cleanup_log}" >/dev/null
 
@@ -75,11 +76,27 @@ azure_client_id=""
 azure_client_secret=""
 azure_tenant_id=""
 azure_subscription_id=""
+azure_has_service_principal="false"
 azure_auth_mode="acr-basic"
+
+if [ -n "${STAGING_AZURE_CREDENTIALS:-}" ]; then
+  materialize_json_secret "${STAGING_AZURE_CREDENTIALS}" "${azure_creds_file}"
+  azure_client_id="$(jq -r '.clientId // empty' "${azure_creds_file}")"
+  azure_client_secret="$(jq -r '.clientSecret // empty' "${azure_creds_file}")"
+  azure_tenant_id="$(jq -r '.tenantId // empty' "${azure_creds_file}")"
+  azure_subscription_id="$(jq -r '.subscriptionId // empty' "${azure_creds_file}")"
+
+  if [ -z "${azure_client_id}" ] || [ -z "${azure_client_secret}" ] || [ -z "${azure_tenant_id}" ]; then
+    echo "Azure credentials payload is missing clientId/clientSecret/tenantId" >&2
+    exit 1
+  fi
+
+  azure_has_service_principal="true"
+fi
 
 if azure_oidc_ready; then
   azure_auth_mode="oidc"
-elif [ -n "${STAGING_AZURE_CREDENTIALS:-}" ]; then
+elif [ "${azure_has_service_principal}" = "true" ]; then
   azure_auth_mode="service-principal"
 fi
 
@@ -89,22 +106,21 @@ if [ -n "${STAGING_AKS_KUBECONFIG:-}" ]; then
   export KUBECONFIG="${aks_kubeconfig_file}"
 else
   require_envs STAGING_AZURE_RESOURCE_GROUP_NAME
-  if [ "${azure_auth_mode}" = "service-principal" ]; then
-    materialize_json_secret "${STAGING_AZURE_CREDENTIALS}" "${azure_creds_file}"
-    azure_client_id="$(jq -r '.clientId // empty' "${azure_creds_file}")"
-    azure_client_secret="$(jq -r '.clientSecret // empty' "${azure_creds_file}")"
-    azure_tenant_id="$(jq -r '.tenantId // empty' "${azure_creds_file}")"
-    azure_subscription_id="$(jq -r '.subscriptionId // empty' "${azure_creds_file}")"
-
-    if [ -z "${azure_client_id}" ] || [ -z "${azure_client_secret}" ] || [ -z "${azure_tenant_id}" ]; then
-      echo "Azure credentials payload is missing clientId/clientSecret/tenantId" >&2
-      exit 1
-    fi
-  elif [ "${azure_auth_mode}" = "acr-basic" ]; then
+  if [ "${azure_auth_mode}" = "acr-basic" ]; then
     echo "Ephemeral AKS mode requires GitLab OIDC variables or STAGING_AZURE_CREDENTIALS" >&2
     exit 1
   fi
 fi
+
+azure_login_service_principal() {
+  az login --service-principal \
+    --username "${azure_client_id}" \
+    --password "${azure_client_secret}" \
+    --tenant "${azure_tenant_id}" >/dev/null
+  if [ -n "${azure_subscription_id}" ]; then
+    az account set --subscription "${azure_subscription_id}" >/dev/null
+  fi
+}
 
 operator_registry="${STAGING_AZURE_ACR_LOGIN_SERVER}"
 operator_image="${operator_registry}/splunk/splunk-operator:${CI_COMMIT_SHA}"
@@ -163,28 +179,31 @@ append_context "${context_file}" "enterprise_image_source" "${RESOLVED_SPLUNK_EN
 append_context "${context_file}" "azure_resource_group" "${AZURE_RESOURCE_GROUP}"
 append_context "${context_file}" "azure_container_registry" "${AZURE_CONTAINER_REGISTRY}"
 append_context "${context_file}" "azure_region" "${AZURE_REGION}"
-append_context "${context_file}" "azure_auth_mode" "${azure_auth_mode}"
+append_context "${context_file}" "azure_auth_mode_requested" "${azure_auth_mode}"
 append_context "${context_file}" "test_focus" "${TEST_FOCUS}"
 append_context "${context_file}" "test_to_skip" "${TEST_TO_SKIP}"
 append_context "${context_file}" "test_timeout" "${TEST_TIMEOUT}"
 
 if [ "${azure_auth_mode}" = "oidc" ]; then
   log_step "azure:auth:start mode=oidc" | tee -a "${run_log}" >/dev/null
-  azure_login_oidc >> "${run_log}" 2>&1
-  log_step "azure:auth:complete" | tee -a "${run_log}" >/dev/null
-elif [ "${cluster_mode}" = "ephemeral-aks" ]; then
-  log_step "azure:auth:start" | tee -a "${run_log}" >/dev/null
-  az login --service-principal \
-    --username "${azure_client_id}" \
-    --password "${azure_client_secret}" \
-    --tenant "${azure_tenant_id}" >> "${run_log}" 2>&1
-  if [ -n "${azure_subscription_id}" ]; then
-    az account set --subscription "${azure_subscription_id}" >> "${run_log}" 2>&1
+  if azure_login_oidc >> "${run_log}" 2>&1; then
+    log_step "azure:auth:complete" | tee -a "${run_log}" >/dev/null
+  elif [ "${cluster_mode}" = "ephemeral-aks" ] && [ "${azure_has_service_principal}" = "true" ]; then
+    log_step "azure:auth:oidc-fallback service-principal" | tee -a "${run_log}" >/dev/null
+    azure_auth_mode="service-principal"
+    azure_login_service_principal >> "${run_log}" 2>&1
+    log_step "azure:auth:complete" | tee -a "${run_log}" >/dev/null
+  else
+    exit 1
   fi
+elif [ "${cluster_mode}" = "ephemeral-aks" ]; then
+  log_step "azure:auth:start mode=service-principal" | tee -a "${run_log}" >/dev/null
+  azure_login_service_principal >> "${run_log}" 2>&1
   log_step "azure:auth:complete" | tee -a "${run_log}" >/dev/null
 else
   log_step "azure:auth:skipped mode=${cluster_mode}" | tee -a "${run_log}" >/dev/null
 fi
+append_context "${context_file}" "azure_auth_mode_effective" "${azure_auth_mode}"
 
 log_step "azure:registry-login:start ${operator_registry}" | tee -a "${run_log}" >/dev/null
 if [ "${azure_auth_mode}" = "oidc" ] || [ "${azure_auth_mode}" = "service-principal" ]; then
@@ -208,6 +227,7 @@ log_step "azure:build:complete" | tee -a "${build_log}" >/dev/null
 if [ "${cluster_mode}" = "ephemeral-aks" ]; then
   log_step "azure:cluster-up:start ${TEST_CLUSTER_NAME}" | tee -a "${cluster_log}" >/dev/null
   make cluster-up 2>&1 | tee -a "${cluster_log}"
+  cluster_created="true"
   log_step "azure:cluster-up:complete" | tee -a "${cluster_log}" >/dev/null
 else
   log_step "azure:cluster-up:skipped mode=${cluster_mode}" | tee -a "${cluster_log}" >/dev/null
