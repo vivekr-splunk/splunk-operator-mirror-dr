@@ -22,6 +22,8 @@ fi
 context_file="rehearsal/${WORKFLOW_SLUG}-runtime-context.txt"
 : > "${context_file}"
 TRIVY_RELEASE="${STAGING_TRIVY_RELEASE:-v0.69.3}"
+TRIVY_ASSET_URL="${STAGING_TRIVY_ASSET_URL:-}"
+trivy_resolution_mode="direct-url"
 
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update
@@ -40,21 +42,28 @@ fi
 python3 -m venv /tmp/trivy-tools-venv
 . /tmp/trivy-tools-venv/bin/activate
 pip install --no-cache-dir awscli
-trivy_release_api="https://api.github.com/repos/aquasecurity/trivy/releases/latest"
-if [ "${TRIVY_RELEASE}" != "latest" ]; then
-  trivy_release_tag="${TRIVY_RELEASE#v}"
-  trivy_release_api="https://api.github.com/repos/aquasecurity/trivy/releases/tags/v${trivy_release_tag}"
+if [ -z "${TRIVY_ASSET_URL}" ]; then
+  if [ "${TRIVY_RELEASE}" = "latest" ]; then
+    trivy_resolution_mode="github-api"
+    trivy_release_api="https://api.github.com/repos/aquasecurity/trivy/releases/latest"
+    trivy_release_json="$(curl -fsSL \
+      -H 'Accept: application/vnd.github+json' \
+      -H 'X-GitHub-Api-Version: 2022-11-28' \
+      "${trivy_release_api}")"
+    TRIVY_TAG="$(printf '%s' "${trivy_release_json}" | jq -r '.tag_name')"
+    TRIVY_ASSET_URL="$(printf '%s' "${trivy_release_json}" | jq -r '.assets[] | select(.name | endswith("_Linux-64bit.tar.gz")) | .browser_download_url' | head -n 1)"
+  else
+    trivy_release_tag="${TRIVY_RELEASE#v}"
+    TRIVY_TAG="v${trivy_release_tag}"
+    TRIVY_ASSET_URL="https://github.com/aquasecurity/trivy/releases/download/${TRIVY_TAG}/trivy_${trivy_release_tag}_Linux-64bit.tar.gz"
+  fi
+else
+  TRIVY_TAG="${TRIVY_RELEASE}"
+  trivy_resolution_mode="explicit-url"
 fi
 
-trivy_release_json="$(curl -fsSL \
-  -H 'Accept: application/vnd.github+json' \
-  -H 'X-GitHub-Api-Version: 2022-11-28' \
-  "${trivy_release_api}")"
-TRIVY_TAG="$(printf '%s' "${trivy_release_json}" | jq -r '.tag_name')"
-TRIVY_ASSET_URL="$(printf '%s' "${trivy_release_json}" | jq -r '.assets[] | select(.name | endswith("_Linux-64bit.tar.gz")) | .browser_download_url' | head -n 1)"
-
-if [ -z "${TRIVY_TAG}" ] || [ "${TRIVY_TAG}" = "null" ] || [ -z "${TRIVY_ASSET_URL}" ]; then
-  echo "Unable to resolve Trivy release asset from ${trivy_release_api}" >&2
+if [ -z "${TRIVY_TAG:-}" ] || [ "${TRIVY_TAG}" = "null" ] || [ -z "${TRIVY_ASSET_URL}" ]; then
+  echo "Unable to resolve Trivy release asset for selector ${TRIVY_RELEASE}" >&2
   exit 1
 fi
 
@@ -87,6 +96,7 @@ append_context "${context_file}" "ecr_registry_present" "true"
 append_context "${context_file}" "ecr_region_source" "${RESOLVED_ECR_REGION_SOURCE}"
 append_context "${context_file}" "aws_auth_mode" "${aws_auth_mode}"
 append_context "${context_file}" "trivy_release_selector" "${TRIVY_RELEASE}"
+append_context "${context_file}" "trivy_resolution_mode" "${trivy_resolution_mode}"
 append_context "${context_file}" "trivy_tag" "${TRIVY_TAG}"
 append_context "${context_file}" "trivy_asset_url" "${TRIVY_ASSET_URL}"
 

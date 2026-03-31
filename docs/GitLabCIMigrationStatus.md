@@ -467,3 +467,34 @@ Interpretation:
   - `cla-check.yml`
 - These rehearsal jobs are intentionally conservative because no GitLab variables are loaded yet in the rehearsal project.
 - Additional workflow classes should continue to move from scaffolded to fully executable and validated in staging before production cutover.
+
+## 2026-03-31 Local Rehearsal Update
+
+- Investigated the current MR pipeline `35125450` on commit `adfcc90b`.
+- Observed failures:
+  - `build-test-push-trivy-scan`
+    - failed after an anonymous GitHub releases API call returned `403`
+  - `distroless-int-test-workflow-rehearsal`
+    - failed after a suite timeout at roughly `6h57m` in the full `managersecret` S1 profile
+- Local code changes applied:
+  - `hack/gitlab-ci/build-test-push-trivy-scan.sh`
+    - pinned Trivy releases now resolve through a direct GitHub release asset URL by default
+    - explicit `latest` still uses the GitHub API path
+    - optional `STAGING_TRIVY_ASSET_URL` override now exists for controlled pinning or mirrors
+  - `.gitlab-ci.yml`
+    - first-live-proof variant runtimes now use:
+      - `JOB_INT_TEST_PROFILE: managersecret-smoke-s1`
+      - `JOB_INT_TEST_TIMEOUT: 3h`
+    - this change was applied to:
+      - `distroless-int-test-workflow-rehearsal`
+      - `arm-ubuntu-int-test-workflow-rehearsal`
+      - `arm-rhel-int-test-workflow-rehearsal`
+      - `arm-al2023-int-test-workflow-rehearsal`
+- Intent:
+  - remove the Trivy bootstrap dependency on the rate-limited GitHub releases API for pinned versions
+  - keep the first live proof for variant runtimes bounded to a representative secret-update smoke slice instead of a nearly seven-hour full-managersecret run
+- Local validation completed:
+  - shell syntax check for `build-test-push-trivy-scan.sh`
+  - YAML parse for `.gitlab-ci.yml`
+- Live proof still pending:
+  - a new rehearsal pipeline must run before these changes count as validated

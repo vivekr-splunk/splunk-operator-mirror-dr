@@ -932,13 +932,14 @@ distroless-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/distroless-int-test-workflow.yml
     WORKFLOW_CLASS: integration-eks-distroless
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_DISTROLESS_INTEGRATION
-    JOB_INT_TEST_PROFILE: managersecret
+    JOB_INT_TEST_PROFILE: managersecret-smoke-s1
+    JOB_INT_TEST_TIMEOUT: 3h
     BUILD_IMAGE_REF_FILE: rehearsal/distroless-build-test-push-workflow-image-ref.txt
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: This job now has a concrete distroless integration contract. It consumes the distroless build artifact emitted in the same pipeline, uses the staging enterprise image, and remains staging-only until runtime proof is complete.
+    WORKFLOW_NOTES: This job now has a concrete distroless integration contract. It consumes the distroless build artifact emitted in the same pipeline, uses the staging enterprise image, and runs a representative secret-update smoke slice instead of the full managersecret profile so the first live proof stays bounded.
     WORKFLOW_PLAN: |
       1. Build and pull the distroless operator image from staging ECR only.
-      2. Run the distroless integration suite against staging EKS resources.
+      2. Run a bounded distroless secret-update smoke slice against staging EKS resources.
       3. Preserve teardown and log capture exactly as in GitHub.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
   artifacts:
@@ -1015,13 +1016,14 @@ arm-ubuntu-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/arm-Ubuntu-int-test-workflow.yml
     WORKFLOW_CLASS: integration-arm-ubuntu
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_UBUNTU_INTEGRATION
-    JOB_INT_TEST_PROFILE: managersecret
+    JOB_INT_TEST_PROFILE: managersecret-smoke-s1
+    JOB_INT_TEST_TIMEOUT: 3h
     BUILD_IMAGE_REF_FILE: rehearsal/arm-ubuntu-build-test-push-workflow-image-ref.txt
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: This workflow now has a concrete ARM Ubuntu integration contract. It consumes the matching staging build artifact in the same pipeline and uses the staging enterprise image explicitly rather than an inherited production prefix.
+    WORKFLOW_NOTES: This workflow now has a concrete ARM Ubuntu integration contract. It consumes the matching staging build artifact in the same pipeline, uses the staging enterprise image explicitly, and runs a bounded representative smoke slice for the first live runtime proof.
     WORKFLOW_PLAN: |
       1. Build the ARM Ubuntu operator image into staging ECR.
-      2. Run the ARM Ubuntu integration suite against staging EKS resources.
+      2. Run a bounded ARM Ubuntu secret-update smoke slice against staging EKS resources.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
   artifacts:
     when: always
@@ -1066,13 +1068,14 @@ arm-rhel-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/arm-RHEL-int-test-workflow.yml
     WORKFLOW_CLASS: integration-arm-rhel
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_RHEL_INTEGRATION
-    JOB_INT_TEST_PROFILE: managersecret
+    JOB_INT_TEST_PROFILE: managersecret-smoke-s1
+    JOB_INT_TEST_TIMEOUT: 3h
     BUILD_IMAGE_REF_FILE: rehearsal/arm-rhel-build-test-push-workflow-image-ref.txt
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: This workflow now has a concrete ARM RHEL integration contract. It consumes the matching staging build artifact in the same pipeline and uses the staging enterprise image explicitly.
+    WORKFLOW_NOTES: This workflow now has a concrete ARM RHEL integration contract. It consumes the matching staging build artifact in the same pipeline, uses the staging enterprise image explicitly, and runs a bounded representative smoke slice for the first live runtime proof.
     WORKFLOW_PLAN: |
       1. Build the ARM RHEL operator image into staging ECR.
-      2. Run the ARM RHEL integration path against staging EKS resources.
+      2. Run a bounded ARM RHEL secret-update smoke slice against staging EKS resources.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
   artifacts:
     when: always
@@ -1117,13 +1120,14 @@ arm-al2023-int-test-workflow-rehearsal:
     SOURCE_WORKFLOW_FILE: .github/workflows/arm-AL2023-int-test-workflow.yml
     WORKFLOW_CLASS: integration-arm-al2023
     EXECUTE_FLAG_NAME: STAGING_EXECUTE_ARM_AL2023_INTEGRATION
-    JOB_INT_TEST_PROFILE: managersecret
+    JOB_INT_TEST_PROFILE: managersecret-smoke-s1
+    JOB_INT_TEST_TIMEOUT: 3h
     BUILD_IMAGE_REF_FILE: rehearsal/arm-al2023-build-test-push-workflow-image-ref.txt
     REQUIRED_VARS: STAGING_ECR_REPOSITORY,STAGING_AWS_ACCESS_KEY_ID,STAGING_AWS_SECRET_ACCESS_KEY,STAGING_AWS_DEFAULT_REGION,STAGING_EKS_VPC_PRIVATE_SUBNET_STRING,STAGING_EKS_VPC_PUBLIC_SUBNET_STRING,STAGING_TEST_BUCKET,STAGING_TEST_INDEXES_S3_BUCKET
-    WORKFLOW_NOTES: This workflow now has a concrete ARM AL2023 integration contract. It consumes the matching staging build artifact in the same pipeline and uses the staging enterprise image explicitly.
+    WORKFLOW_NOTES: This workflow now has a concrete ARM AL2023 integration contract. It consumes the matching staging build artifact in the same pipeline, uses the staging enterprise image explicitly, and runs a bounded representative smoke slice for the first live runtime proof.
     WORKFLOW_PLAN: |
       1. Build the ARM AL2023 operator image into staging ECR.
-      2. Run the ARM AL2023 integration path against staging EKS resources.
+      2. Run a bounded ARM AL2023 secret-update smoke slice against staging EKS resources.
     EXECUTION_SCRIPT_FILE: hack/gitlab-ci/int-test-workflow-rehearsal.sh
   artifacts:
     when: always
