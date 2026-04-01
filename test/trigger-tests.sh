@@ -2,6 +2,7 @@
 
 scriptdir=$(dirname "$0")
 topdir=${scriptdir}/..
+GINKGO_VERSION=v2.23.4
 
 source ${scriptdir}/env.sh
 
@@ -25,10 +26,7 @@ fi
 rc=$(which ginkgo)
 if [ -z "$rc" ]; then
   echo "ginkgo is not installed or in the PATH. Installing..."
-  go get github.com/onsi/ginkgo/ginkgo/v2
-  go get github.com/onsi/gomega/...
-
-  go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@latest
+  go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo@${GINKGO_VERSION}
 fi
 
 echo "Running test using number of nodes: ${NUM_NODES}"
