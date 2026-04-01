@@ -14,6 +14,7 @@ mirror_repo="${STAGING_GITHUB_MIRROR_REPO:-}"
 mirror_compare_refs="${STAGING_GITHUB_MIRROR_COMPARE_REFS:-main,develop}"
 mirror_token_present="false"
 mirror_url="https://github.com/${mirror_repo}.git"
+source_remote="${CI_REPOSITORY_URL:-origin}"
 
 if [ -n "${STAGING_GITHUB_MIRROR_TOKEN:-}" ]; then
   mirror_token_present="true"
@@ -30,8 +31,10 @@ append_context "${context_file}" "mirror_repo" "${mirror_repo}"
 append_context "${context_file}" "mirror_compare_refs" "${mirror_compare_refs}"
 append_context "${context_file}" "mirror_token_present" "${mirror_token_present}"
 append_context "${context_file}" "mutation_policy" "read-only"
+append_context "${context_file}" "source_remote" "${source_remote}"
 
 remote_refs="$(git ls-remote "${mirror_url}")"
+source_refs="$(git ls-remote "${source_remote}")"
 
 old_ifs="${IFS}"
 IFS=','
@@ -39,26 +42,26 @@ for raw_ref in ${mirror_compare_refs}; do
   ref_name="$(trim_csv_field "${raw_ref}")"
   [ -z "${ref_name}" ] && continue
 
-  local_sha=""
+  source_sha=""
   remote_sha=""
-  status="missing-local"
+  status="missing-source"
 
-  if git rev-parse --verify "refs/heads/${ref_name}" >/dev/null 2>&1; then
-    local_sha="$(git rev-parse "refs/heads/${ref_name}")"
+  source_sha="$(printf '%s\n' "${source_refs}" | awk '$2=="refs/heads/'"${ref_name}"'" {print $1; exit}')"
+  if [ -n "${source_sha}" ]; then
     status="missing-remote"
   fi
 
   remote_sha="$(printf '%s\n' "${remote_refs}" | awk '$2=="refs/heads/'"${ref_name}"'" {print $1; exit}')"
 
-  if [ -n "${local_sha}" ] && [ -n "${remote_sha}" ]; then
-    if [ "${local_sha}" = "${remote_sha}" ]; then
+  if [ -n "${source_sha}" ] && [ -n "${remote_sha}" ]; then
+    if [ "${source_sha}" = "${remote_sha}" ]; then
       status="match"
     else
       status="mismatch"
     fi
   fi
 
-  printf '%s\t%s\t%s\t%s\n' "${ref_name}" "${status}" "${local_sha:-missing}" "${remote_sha:-missing}" >> "${refs_file}"
+  printf '%s\t%s\t%s\t%s\n' "${ref_name}" "${status}" "${source_sha:-missing}" "${remote_sha:-missing}" >> "${refs_file}"
 done
 IFS="${old_ifs}"
 
@@ -69,6 +72,7 @@ cat > "${report_file}" <<EOF
 - Compared refs: \`${mirror_compare_refs}\`
 - Token present: \`${mirror_token_present}\`
 - Mutation policy: read-only
+- Source remote: \`${source_remote}\`
 
 This rehearsal checks read-only branch parity against the configured GitHub repository. It does not push, disable, or mutate any GitHub mirror settings.
 EOF
@@ -78,4 +82,5 @@ mirror_repo=${mirror_repo}
 mirror_compare_refs=${mirror_compare_refs}
 mirror_token_present=${mirror_token_present}
 mutation_policy=read-only
+source_remote=${source_remote}
 EOF
