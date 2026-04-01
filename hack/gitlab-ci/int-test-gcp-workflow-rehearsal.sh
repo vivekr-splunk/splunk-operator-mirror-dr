@@ -155,6 +155,21 @@ gcp_login_service_account_key() {
   gcloud auth activate-service-account --key-file="${gcp_key_file}" >/dev/null
 }
 
+configure_gcp_application_default_credentials() {
+  case "${gcp_auth_mode}" in
+    oidc)
+      export GOOGLE_APPLICATION_CREDENTIALS="${gcp_oidc_cred_file}"
+      export CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${gcp_oidc_cred_file}"
+      ;;
+    service-account-key)
+      export GOOGLE_APPLICATION_CREDENTIALS="${gcp_key_file}"
+      unset CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
+      ;;
+  esac
+
+  export GOOGLE_CLOUD_PROJECT="${GCP_PROJECT_ID}"
+}
+
 gcp_auth_with_oidc() {
   gcp_registry_host="$(printf '%s' "${GCP_ARTIFACT_REGISTRY}" | cut -d/ -f1)"
   auth_rc=0
@@ -209,6 +224,9 @@ if [ "${gcp_auth_mode}" = "oidc" ]; then
 else
   gcp_auth_with_service_account_key
 fi
+configure_gcp_application_default_credentials
+append_context "${context_file}" "google_application_credentials" "${GOOGLE_APPLICATION_CREDENTIALS}"
+append_context "${context_file}" "gcp_auth_mode_effective" "${gcp_auth_mode}"
 log_step "gcp:auth:complete" | tee -a "${run_log}" >/dev/null
 
 log_step "gcp:operator-image:promote:start source=${source_operator_image} target=${operator_image}" | tee -a "${build_log}" >/dev/null
