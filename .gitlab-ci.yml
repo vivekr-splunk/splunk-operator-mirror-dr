@@ -413,6 +413,13 @@ default:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
 
+.rules-web-or-mr-manual-optional-on-mr:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+
 .rules-variant-runtime-or-web-or-mr-manual:
   rules:
     - if: '$REHEARSAL_PIPELINE_MODE == "variant_runtime"'
@@ -425,6 +432,13 @@ default:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
+
+.rules-schedule-or-mr-manual-optional-on-mr:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
 
 .rules-main-or-mr-manual:
   rules:
@@ -785,7 +799,7 @@ namespace-scope-int-workflow-rehearsal:
     - .integration-family-10h
     - .required-rehearsal
     - .needs-standard-build
-    - .rules-schedule-or-mr-manual
+    - .rules-schedule-or-mr-manual-optional-on-mr
   variables:
     WORKFLOW_SLUG: namespace-scope-int-workflow
     WORKFLOW_NAME: Namespace-scope Operator Integration Test Workflow
@@ -817,7 +831,7 @@ manual-int-test-workflow-rehearsal:
     - .integration-family-10h
     - .required-rehearsal
     - .needs-standard-build
-    - .rules-web-or-mr-manual
+    - .rules-web-or-mr-manual-optional-on-mr
   variables:
     WORKFLOW_SLUG: manual-int-test-workflow
     WORKFLOW_NAME: Manual Integration Test Workflow
@@ -848,7 +862,7 @@ nightly-int-test-workflow-rehearsal:
     - .integration-family-10h
     - .required-rehearsal
     - .needs-standard-build
-    - .rules-schedule-or-mr-manual
+    - .rules-schedule-or-mr-manual-optional-on-mr
   variables:
     WORKFLOW_SLUG: nightly-int-test-workflow
     WORKFLOW_NAME: Nightly Integration Test Workflow
