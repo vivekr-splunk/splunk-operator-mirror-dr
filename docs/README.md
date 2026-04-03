@@ -22,6 +22,8 @@ COMMUNITY DEVELOPED: Splunk Operator for Kubernetes is an open source product de
 
 If you're interested in contributing to the SOK open source project, review the [Contributing to the Project](CONTRIBUTING.md) page.
 
+Internal contributors using the authoritative GitLab delivery model should review the [GitLab Delivery Model](GitLabDeliveryModel.md) page for the development, qualification, and release workflow shape.
+
 **Community Support & Discussions on
 [Slack](https://splunk-usergroups.slack.com)** channel #splunk-operator-for-kubernetes
 
