@@ -2,14 +2,14 @@
 
 This is the single long-term process document for how `sok/splunk-operator` works in GitLab.
 
-It replaces the migration-status and design-review style GitLab documents as the steady-state reference for:
+It is the steady-state reference for:
 
 - development workflow
 - qualification workflow
 - product release workflow
 - GitHub mirror and intake boundaries
 
-Migration logs, rehearsal notes, and architecture review write-ups should stay outside the long-term repo surface.
+Historical planning notes and design review write-ups should stay outside the long-term product repo surface.
 
 ## Operating Principles
 
