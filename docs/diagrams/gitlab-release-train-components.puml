@@ -2,8 +2,9 @@
 !includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
 
 title Splunk Operator GitLab Release Train Components
-scale max 3600 width
-LAYOUT_LEFT_RIGHT()
+scale max 3200 width
+skinparam Padding 30
+LAYOUT_TOP_DOWN()
 
 ContainerDb(vars, "GitLab Release Variables", "GitLab variables", "Release credentials, staging/public targets, signing inputs")
 System_Ext(psr, "PSR/k8s-operator", "Release-scale qualification")
